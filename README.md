@@ -1,10 +1,15 @@
 # FCS/FCCS Analysis App
 
+**Live app:** https://fcsanalysis-2numjr9tkkzc2jyqmtq6lz.streamlit.app/
+
 A local, cross-platform (macOS Apple Silicon-native) tool for analyzing Fluorescence
 Correlation/Cross-Correlation Spectroscopy (FCS/FCCS) traces exported from an ISS
 VistaVision instrument, without needing VistaVision itself. Built for the tau-protein
 aggregation project (tau binding to NT vs. a BSA negative control, across a 0hr/3hr/48hr
 time course).
+
+The live app above is deployed on Streamlit Community Cloud, tracking the `main` branch
+of this repo -- pushes to `main` redeploy it automatically within a couple of minutes.
 
 ## Quick start (for Han / any non-programmer labmate)
 
