@@ -27,7 +27,7 @@ st.caption(
 val_source = st.radio("Trace for this check", ["Generate a quick synthetic trace", "Upload a real file"], horizontal=True)
 
 if val_source == "Upload a real file":
-    uploaded = st.file_uploader("Trace file", type=None, key="val_upload")
+    uploaded = st.file_uploader("Trace file", type=["csv"], key="val_upload")
     trace_for_fft = None
     if uploaded is not None:
         trace_for_fft = load_trace_cached(uploaded.getvalue(), uploaded.name)

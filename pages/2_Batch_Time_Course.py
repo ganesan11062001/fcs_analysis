@@ -20,7 +20,7 @@ st.caption(
     "identically to every file, and compare results across the series."
 )
 
-uploaded_files = st.file_uploader("Trace files", type=None, accept_multiple_files=True)
+uploaded_files = st.file_uploader("Trace files", type=["csv"], accept_multiple_files=True)
 if not uploaded_files:
     st.info("Upload two or more trace files to begin.")
     st.stop()

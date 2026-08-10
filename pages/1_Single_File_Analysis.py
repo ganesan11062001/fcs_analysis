@@ -28,7 +28,7 @@ d = st.session_state["defaults"]
 
 st.title("Single File Analysis")
 
-uploaded = st.file_uploader("VistaVision trace export (single- or dual-channel CSV)", type=None)
+uploaded = st.file_uploader("VistaVision trace export (single- or dual-channel CSV)", type=["csv"])
 if uploaded is None:
     st.info("Upload a trace file to begin.")
     st.stop()
