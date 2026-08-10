@@ -23,10 +23,59 @@ DEFAULT_SETTINGS = {
     "min_reliable_n_samples": 10,
 }
 
+# Validated categorical palette (CVD-safe, fixed order -- see dataviz skill).
+# Assigned by entity, not cycled: CH1 always slot 1, CH2 always slot 2, cross
+# always slot 3, everywhere in the app (charts, comparison plots, metrics).
+SERIES_COLORS = {
+    "acf_ch1": "#2a78d6",  # slot 1 -- blue
+    "acf_ch2": "#eb6834",  # slot 2 -- orange
+    "cross": "#1baf7a",  # slot 3 -- aqua
+}
+SERIES_LABELS = {
+    "acf_ch1": "CH1 autocorrelation",
+    "acf_ch2": "CH2 autocorrelation",
+    "cross": "Cross-correlation",
+}
+MUTED_INK = "#898781"  # axis/label text token -- never used for a data mark's identity
+GRIDLINE = "#e1e0d9"  # hairline gridline color
+REFERENCE_LINE = "#0b0b0b"  # neutral (non-categorical) color for "true value" annotation lines
+
 
 def init_defaults():
     if "defaults" not in st.session_state:
         st.session_state["defaults"] = dict(DEFAULT_SETTINGS)
+
+
+def sidebar_about():
+    """Small, consistent wayfinding blurb shown in the sidebar on every page --
+    matters once the app is a public URL that people may land on directly via
+    a shared link to a sub-page, with no context from the Home page."""
+    with st.sidebar:
+        st.caption(
+            "**FCS/FCCS analysis for tau aggregation studies**\n\n"
+            "Analyzes ISS VistaVision trace exports (CSV). See the Home page "
+            "for an overview of all four steps."
+        )
+
+
+def format_seconds(x):
+    """Human-scale formatting for a time constant (tau_D, dt, etc.): picks
+    us/ms/s so a labmate doesn't have to mentally parse 2.1e-04."""
+    if x is None or not np.isfinite(x):
+        return "n/a"
+    ax = abs(x)
+    if ax < 1e-3:
+        return f"{x * 1e6:.3g} µs"
+    if ax < 1.0:
+        return f"{x * 1e3:.3g} ms"
+    return f"{x:.3g} s"
+
+
+def apply_chart_style(fig):
+    """Hairline, recessive gridlines -- applied to every chart for a consistent look."""
+    fig.update_xaxes(gridcolor=GRIDLINE, zerolinecolor=GRIDLINE, linecolor=GRIDLINE)
+    fig.update_yaxes(gridcolor=GRIDLINE, zerolinecolor=GRIDLINE, linecolor=GRIDLINE)
+    return fig
 
 
 @st.cache_data(show_spinner="Parsing trace file...")
@@ -81,18 +130,27 @@ def time_window_selector(time_arr, key_prefix):
 def plot_raw_trace_with_window(time_arr, channels, t0, t1, max_points=5000):
     disp_time, _ = decimate_for_display(time_arr, next(iter(channels.values())), max_points)
     fig = go.Figure()
+    channel_colors = {"CH1": SERIES_COLORS["acf_ch1"], "CH2": SERIES_COLORS["acf_ch2"]}
     for name, arr in channels.items():
         _, disp_y = decimate_for_display(time_arr, arr, max_points)
-        fig.add_trace(go.Scatter(x=disp_time, y=disp_y, mode="lines", name=name, line=dict(width=1)))
-    fig.add_vrect(x0=t0, x1=t1, fillcolor="LightGreen", opacity=0.2, line_width=0, annotation_text="kept window")
+        fig.add_trace(
+            go.Scatter(
+                x=disp_time, y=disp_y, mode="lines", name=name,
+                line=dict(width=2, color=channel_colors.get(name)),
+            )
+        )
+    fig.add_vrect(x0=t0, x1=t1, fillcolor="#2a78d6", opacity=0.08, line_width=0, annotation_text="kept window")
     fig.update_layout(
         xaxis_title="Time (s)",
         yaxis_title="Photon counts / bin",
         height=350,
         margin=dict(l=10, r=10, t=30, b=10),
-        legend=dict(orientation="h"),
+        legend=dict(orientation="h") if len(channels) > 1 else dict(),
+        showlegend=len(channels) > 1,
+        plot_bgcolor="#fcfcfb",
+        paper_bgcolor="#fcfcfb",
     )
-    return fig
+    return apply_chart_style(fig)
 
 
 def plot_correlation_curve(results, min_reliable_n_samples, title=""):
@@ -101,11 +159,9 @@ def plot_correlation_curve(results, min_reliable_n_samples, title=""):
     are shown with a distinct marker so long-tau statistical unreliability is
     visually obvious, not hidden."""
     fig = go.Figure()
-    colors = {"acf_ch1": "#d62728", "acf_ch2": "#2ca02c", "cross": "#1f77b4"}
-    labels = {"acf_ch1": "CH1 autocorrelation", "acf_ch2": "CH2 autocorrelation", "cross": "Cross-correlation"}
     any_unreliable = False
     for kind, result in results.items():
-        color = colors.get(kind, "gray")
+        color = SERIES_COLORS.get(kind, MUTED_INK)
         reliable = result.n_samples >= min_reliable_n_samples
         if not np.all(reliable):
             any_unreliable = True
@@ -114,8 +170,8 @@ def plot_correlation_curve(results, min_reliable_n_samples, title=""):
                 x=result.tau[reliable],
                 y=result.g[reliable],
                 mode="markers",
-                name=labels.get(kind, kind),
-                marker=dict(color=color, size=5),
+                name=SERIES_LABELS.get(kind, kind),
+                marker=dict(color=color, size=8, line=dict(width=1, color="#fcfcfb")),
             )
         )
         if np.any(~reliable):
@@ -124,25 +180,36 @@ def plot_correlation_curve(results, min_reliable_n_samples, title=""):
                     x=result.tau[~reliable],
                     y=result.g[~reliable],
                     mode="markers",
-                    name=f"{labels.get(kind, kind)} (low sample count)",
-                    marker=dict(color=color, size=7, symbol="x", opacity=0.5),
+                    name=f"{SERIES_LABELS.get(kind, kind)} (low sample count)",
+                    marker=dict(color=color, size=9, symbol="x", opacity=0.55),
                 )
             )
     fig.update_xaxes(type="log", title="tau (s)")
     fig.update_yaxes(title="G(tau)")
-    fig.update_layout(title=title, height=400, margin=dict(l=10, r=10, t=40, b=10), legend=dict(orientation="h"))
-    return fig, any_unreliable
+    fig.update_layout(
+        title=title, height=400, margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h"), plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb",
+    )
+    return apply_chart_style(fig), any_unreliable
 
 
-def plot_fit_overlay(tau, g, fit_curve_arr, title=""):
+def plot_fit_overlay(tau, g, fit_curve_arr, title="", color=None):
+    color = color or SERIES_COLORS["acf_ch1"]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=tau, y=g, mode="markers", name="data", marker=dict(size=5, color="gray")))
+    fig.add_trace(
+        go.Scatter(x=tau, y=g, mode="markers", name="data", marker=dict(size=8, color=MUTED_INK, opacity=0.7))
+    )
     order = np.argsort(tau)
-    fig.add_trace(go.Scatter(x=tau[order], y=fit_curve_arr[order], mode="lines", name="fit", line=dict(color="red")))
+    fig.add_trace(
+        go.Scatter(x=tau[order], y=fit_curve_arr[order], mode="lines", name="fit", line=dict(color=color, width=2))
+    )
     fig.update_xaxes(type="log", title="tau (s)")
     fig.update_yaxes(title="G(tau)")
-    fig.update_layout(title=title, height=350, margin=dict(l=10, r=10, t=40, b=10))
-    return fig
+    fig.update_layout(
+        title=title, height=350, margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h"), plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb",
+    )
+    return apply_chart_style(fig)
 
 
 def fit_settings_widgets(key_prefix, label):

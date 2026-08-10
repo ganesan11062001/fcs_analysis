@@ -3,10 +3,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from app_common import sidebar_about, apply_chart_style, MUTED_INK, SERIES_COLORS
 from core.kd import fit_kd, quadratic_binding_isotherm
 from core.export import kd_result_to_df, df_to_csv_bytes
 
 st.set_page_config(page_title="Kd Fitting", layout="wide")
+sidebar_about()
 
 st.title("Kd Fitting from a Concentration Series")
 st.caption(
@@ -34,42 +36,62 @@ else:
         {"label": ["sample 1", "sample 2", "sample 3"], "NT_concentration": [0.0, 0.0, 0.0], "bound_fraction": [0.0, 0.0, 0.0], "include": True}
     )
 
-st.subheader("1. Concentration series data")
-st.caption("Type the [NT] concentration for each file/sample directly into the table below.")
-kd_table = st.data_editor(base_df, key="kd_table_editor", num_rows="dynamic", hide_index=True)
+with st.container(border=True):
+    st.subheader("1. Concentration series data")
+    st.caption("Type the [NT] concentration for each file/sample directly into the table below.")
+    kd_table = st.data_editor(base_df, key="kd_table_editor", num_rows="dynamic", hide_index=True)
 
-T_total = st.number_input("Fixed Tau-FL tracer concentration ([T]_total)", min_value=1e-9, value=0.001, format="%.6f")
+    T_total = st.number_input("Fixed Tau-FL tracer concentration ([T]_total)", min_value=1e-9, value=0.001, format="%.6f")
 
-if st.button("Fit Kd", type="primary"):
-    active = kd_table[kd_table["include"].fillna(True)]
-    active = active.dropna(subset=["NT_concentration", "bound_fraction"])
-    if len(active) < 3:
-        st.error("Need at least 3 included data points with both a concentration and a bound fraction.")
-    else:
-        result = fit_kd(active["NT_concentration"].to_numpy(), active["bound_fraction"].to_numpy(), T_total=T_total)
-        st.session_state["kd_fit_result"] = result
-        st.session_state["kd_fit_data"] = active
+    if st.button("Fit Kd", type="primary"):
+        active = kd_table[kd_table["include"].fillna(True)]
+        active = active.dropna(subset=["NT_concentration", "bound_fraction"])
+        if len(active) < 3:
+            st.error("Need at least 3 included data points with both a concentration and a bound fraction.")
+        else:
+            with st.spinner("Fitting binding isotherm..."):
+                result = fit_kd(active["NT_concentration"].to_numpy(), active["bound_fraction"].to_numpy(), T_total=T_total)
+            st.session_state["kd_fit_result"] = result
+            st.session_state["kd_fit_data"] = active
 
 if "kd_fit_result" in st.session_state:
-    result = st.session_state["kd_fit_result"]
-    active = st.session_state["kd_fit_data"]
+    with st.container(border=True):
+        st.subheader("2. Fit result")
+        result = st.session_state["kd_fit_result"]
+        active = st.session_state["kd_fit_data"]
 
-    if result.success:
-        st.success(f"Kd = {result.Kd:.4g} +/- {result.Kd_stderr:.4g}  (reduced chi^2 = {result.redchi:.4g})")
-    else:
-        st.error(f"Kd fit did not converge: {result.message}")
+        if result.success:
+            kcols = st.columns(3)
+            kcols[0].metric("Kd", f"{result.Kd:.4g}", help="Dissociation constant, same units as [NT]_concentration.")
+            kcols[1].metric("Kd stderr", f"{result.Kd_stderr:.4g}")
+            kcols[2].metric("Reduced chi^2", f"{result.redchi:.4g}")
+        else:
+            st.error(f"Kd fit did not converge: {result.message}")
 
-    L_smooth = np.linspace(0, active["NT_concentration"].max() * 1.1, 200)
-    f_smooth = quadratic_binding_isotherm(L_smooth, result.Kd, result.T_total, result.Fmax, result.Fmin)
+        L_smooth = np.linspace(0, active["NT_concentration"].max() * 1.1, 200)
+        f_smooth = quadratic_binding_isotherm(L_smooth, result.Kd, result.T_total, result.Fmax, result.Fmin)
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=active["NT_concentration"], y=active["bound_fraction"], mode="markers", name="data"))
-    fig.add_trace(go.Scatter(x=L_smooth, y=f_smooth, mode="lines", name="isotherm fit"))
-    fig.update_layout(xaxis_title="[NT] concentration", yaxis_title="Bound fraction", height=400)
-    st.plotly_chart(fig, width="stretch")
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=active["NT_concentration"], y=active["bound_fraction"], mode="markers", name="data",
+                marker=dict(size=9, color=MUTED_INK, opacity=0.8),
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=L_smooth, y=f_smooth, mode="lines", name="isotherm fit",
+                line=dict(color=SERIES_COLORS["acf_ch1"], width=2),
+            )
+        )
+        fig.update_layout(
+            xaxis_title="[NT] concentration", yaxis_title="Bound fraction", height=400,
+            legend=dict(orientation="h"), plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb",
+        )
+        st.plotly_chart(apply_chart_style(fig), width="stretch")
 
-    st.download_button(
-        "Download Kd fit (CSV)",
-        df_to_csv_bytes(kd_result_to_df(active["NT_concentration"], active["bound_fraction"], result)),
-        file_name="kd_fit.csv",
-    )
+        st.download_button(
+            "Download Kd fit (CSV)",
+            df_to_csv_bytes(kd_result_to_df(active["NT_concentration"], active["bound_fraction"], result)),
+            file_name="kd_fit.csv",
+        )
