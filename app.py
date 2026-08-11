@@ -13,37 +13,28 @@ st.caption(
     "needing VistaVision itself."
 )
 
-st.subheader("The pipeline, in four steps")
+st.subheader("Available now")
 
 PAGE_CARDS = [
     (
-        "1 · Single File Analysis",
+        "Methodology",
+        "The exact formula behind every step of the pipeline below.",
+    ),
+    (
+        "Single File Analysis",
         "Load one trace, trim the time window, run the multi-tau correlation engine, and "
         "fit diffusion models to get diffusion time and (for dual-channel data) the FCCS "
         "bound fraction.",
     ),
-    (
-        "2 · Batch / Time Course",
-        "Process a set of files (e.g. across conditions, replicates, or timepoints) with "
-        "one shared settings panel, and compare results across the series.",
-    ),
-    (
-        "3 · Kd Fitting",
-        "Fit a binding isotherm to bound-fraction-vs-ligand-concentration data from a "
-        "concentration series to extract Kd.",
-    ),
-    (
-        "4 · Validation",
-        "Re-run the exact-FFT-vs-multi-tau cross-check and generate synthetic data with a "
-        "known diffusion time, to sanity-check the whole pipeline.",
-    ),
 ]
 
-cols = st.columns(4)
+cols = st.columns(2)
 for col, (title, desc) in zip(cols, PAGE_CARDS):
     with col.container(border=True):
         st.markdown(f"**{title}**")
         st.caption(desc)
+
+st.caption("Batch / Time Course, Kd Fitting, and Validation are temporarily unavailable.")
 
 with st.container(border=True):
     st.subheader("How a single file moves through the pipeline")
@@ -64,8 +55,7 @@ with st.container(border=True):
    into the fraction of each species that's bound to the other.
 
 Every stage is CSV-exportable. See **Methodology** in the sidebar for the exact formula
-behind each step, and **Batch / Time Course** / **Kd Fitting** for running this pipeline
-across many files at once.
+behind each step.
         """
     )
 

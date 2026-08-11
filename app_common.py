@@ -54,7 +54,7 @@ def sidebar_about():
         st.caption(
             "**General-purpose FCS/FCCS data analysis**\n\n"
             "Analyzes ISS VistaVision trace exports (CSV). See the Home page "
-            "for an overview of all four steps."
+            "for an overview of the pipeline."
         )
 
 

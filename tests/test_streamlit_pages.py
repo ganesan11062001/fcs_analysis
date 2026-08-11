@@ -70,7 +70,9 @@ def test_single_file_analysis_single_channel_end_to_end():
 
 
 def test_batch_time_course_end_to_end():
-    at = AppTest.from_file("pages/2_Batch_Time_Course.py")
+    # Page lives outside pages/ (see disabled_pages/) so it's not exposed in the
+    # deployed app's nav yet, but its code is still covered here.
+    at = AppTest.from_file("disabled_pages/2_Batch_Time_Course.py")
     at.run(timeout=60)
     at.file_uploader[0].set_value(
         [
@@ -92,7 +94,7 @@ def test_kd_fitting_manual_entry_default_table():
     # read-only Dataframe test element (no .set_value()/editing support), so
     # this only exercises the page with its default placeholder table -- the
     # isotherm math itself is covered independently in tests/test_fccs_kd.py.
-    at = AppTest.from_file("pages/3_Kd_Fitting.py")
+    at = AppTest.from_file("disabled_pages/3_Kd_Fitting.py")
     at.run(timeout=30)
     assert not at.exception
 
@@ -103,7 +105,7 @@ def test_kd_fitting_manual_entry_default_table():
 
 
 def test_kd_fitting_pull_from_batch_without_batch_run_shows_warning():
-    at = AppTest.from_file("pages/3_Kd_Fitting.py")
+    at = AppTest.from_file("disabled_pages/3_Kd_Fitting.py")
     at.run(timeout=30)
     pull_radio = at.radio[0]
     pull_radio.set_value("Pull from last Batch run")
@@ -113,7 +115,7 @@ def test_kd_fitting_pull_from_batch_without_batch_run_shows_warning():
 
 
 def test_validation_page_synthetic_recovery():
-    at = AppTest.from_file("pages/4_Validation.py")
+    at = AppTest.from_file("disabled_pages/4_Validation.py")
     at.run(timeout=30)
     assert not at.exception
 
@@ -124,7 +126,7 @@ def test_validation_page_synthetic_recovery():
 
 
 def test_validation_page_fft_crosscheck():
-    at = AppTest.from_file("pages/4_Validation.py")
+    at = AppTest.from_file("disabled_pages/4_Validation.py")
     at.run(timeout=30)
 
     gen_synth_btn = [b for b in at.button if b.label == "Generate synthetic trace for FFT check"][0]

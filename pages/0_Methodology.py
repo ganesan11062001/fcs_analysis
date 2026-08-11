@@ -24,8 +24,8 @@ with st.container(border=True):
 5. **Fit** — fit a diffusion model to each correlation curve to get diffusion time(s) and
    amplitude.
 6. **FCCS bound fraction** *(2-channel only)* — combine the three fitted amplitudes.
-7. **Kd** *(separate page)* — fit a binding isotherm across a concentration series of
-   bound fractions.
+7. **Kd** *(not yet available in this deployment)* — fit a binding isotherm across a
+   concentration series of bound fractions.
         """
     )
 
