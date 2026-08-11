@@ -13,12 +13,16 @@ from app_common import (
     format_seconds,
     SERIES_COLORS,
 )
+import numpy as np
+
 from core.binning import apply_point_binning
-from core.correlate import compute_all_correlations
+from core.correlate import compute_all_correlations, compute_correlation_error
 from core.fitting import multi_start_fit
 from core.fccs import bound_fraction_from_cross, amplitude_at_zero
 from core.export import (
     correlation_results_to_df,
+    correlation_results_to_df_with_error,
+    correlation_results_to_vistavision_csv_text,
     fit_result_to_df,
     stability_report_to_df,
     fccs_result_to_df,
@@ -74,11 +78,31 @@ with st.container(border=True):
     )
     base = c3.number_input("Grouping base", min_value=2, max_value=16, value=d["base"], key="sf_base")
 
+    estimate_error = st.checkbox(
+        "Also estimate per-point error (sub-block standard error)", value=True, key="sf_estimate_error",
+        help="Splits the trace into N contiguous sub-blocks, correlates each independently, and uses the "
+        "spread across sub-blocks as each tau point's uncertainty -- the standard block-averaging convention "
+        "used broadly across FCS correlator software. Roughly doubles compute time for this step.",
+    )
+    n_blocks = st.number_input(
+        "Number of sub-blocks", min_value=2, max_value=50, value=10, key="sf_n_blocks", disabled=not estimate_error
+    )
+
     if st.button("Run correlation", type="primary"):
         with st.spinner("Running multi-tau correlation..."):
-            st.session_state["sf_corr_results"] = compute_all_correlations(
+            corr_results = compute_all_correlations(
                 binned_channels, effective_dt, segments=segments, points_per_segment=points_per_segment, base=base
             )
+            corr_errors = {}
+            if estimate_error:
+                corr_errors = compute_correlation_error(
+                    corr_results, binned_channels, effective_dt,
+                    segments=segments, points_per_segment=points_per_segment, base=base, n_blocks=n_blocks,
+                )
+        st.session_state["sf_corr_results"] = corr_results
+        st.session_state["sf_corr_errors"] = corr_errors
+        st.session_state["sf_mean_rates"] = [float(np.mean(arr)) / effective_dt for arr in binned_channels.values()]
+        st.session_state["sf_sampling_rate_hz"] = 1.0 / effective_dt
         st.session_state.pop("sf_fit_results", None)
 
 if "sf_corr_results" not in st.session_state:
@@ -96,10 +120,34 @@ with st.container(border=True):
             "(long-tau statistical unreliability, especially near the edge of the acquisition window)."
         )
 
-    st.download_button(
+    errors = st.session_state.get("sf_corr_errors", {})
+    dl_cols = st.columns(3)
+    dl_cols[0].download_button(
         "Download correlation curves (CSV)",
         df_to_csv_bytes(correlation_results_to_df(results)),
         file_name=f"{uploaded.name}_correlation.csv",
+        help="tau, G(tau), n_samples per curve -- no error column.",
+    )
+    dl_cols[1].download_button(
+        "Download with error (CSV)",
+        df_to_csv_bytes(correlation_results_to_df_with_error(results, errors)),
+        file_name=f"{uploaded.name}_correlation_with_error.csv",
+        disabled=not errors,
+        help="Same as above plus a per-point standard-error column (enable the error "
+        "estimate checkbox above and re-run correlation if this is disabled)."
+        if not errors else "tau, G(tau), error, n_samples per curve.",
+    )
+    dl_cols[2].download_button(
+        "Download (VistaVision format)",
+        correlation_results_to_vistavision_csv_text(
+            results, errors,
+            sampling_rate_hz=st.session_state.get("sf_sampling_rate_hz", 1.0 / effective_dt),
+            mean_rates=st.session_state.get("sf_mean_rates", []),
+        ),
+        file_name=f"{uploaded.name}_correlation_vistavision.csv",
+        help="Matches VistaVision's [HeaderX]/[Data] structure and tau,G,err column layout. Does NOT "
+        "reproduce VistaVision's segment-boundary duplicate rows (an undocumented internal quirk, not "
+        "part of the published multi-tau algorithm this engine is validated against).",
     )
 
 with st.container(border=True):

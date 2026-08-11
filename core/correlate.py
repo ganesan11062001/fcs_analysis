@@ -48,3 +48,45 @@ def compute_all_correlations(channels, dt, segments=5, points_per_segment=15, ba
         results["cross"] = CorrelationResult(taux, gx, nx, "cross", dt, segments, points_per_segment, base)
 
     return results
+
+
+def compute_correlation_error(full_results, channels, dt, segments=5, points_per_segment=15, base=4, n_blocks=10):
+    """Standard sub-block standard-error-of-the-mean estimate for each G(tau) point --
+    the same block-averaging convention used broadly across FCS correlator software
+    (ALV, correlator.com-style hardware correlators, SymPhoTime): split the trace into
+    n_blocks contiguous equal-length sub-traces, correlate each independently with the
+    SAME settings, and take the spread across sub-blocks at each tau as its uncertainty.
+
+    NOT a reproduction of any particular instrument's internal error algorithm (e.g.
+    VistaVision's own error column, which is undocumented) -- this is a standard,
+    independently-defined statistical estimate, so don't expect it to match another
+    tool's error values exactly, only to be a valid uncertainty by the same convention.
+
+    Sub-blocks are prefix-aligned with the full-trace tau grid: a shorter sub-block's
+    multi-tau loop simply terminates earlier (same dt/segments/points_per_segment/base),
+    so results are matched to the full-trace result by position, not by tau value.
+
+    Returns dict[kind] -> np.ndarray of standard errors, same length as
+    full_results[kind].tau, with NaN wherever fewer than 2 sub-blocks reached that tau.
+    """
+    n = len(next(iter(channels.values())))
+    block_len = n // n_blocks
+    if block_len < 2:
+        raise ValueError(f"Trace too short to split into {n_blocks} blocks of >=2 points each.")
+
+    block_results = []
+    for b in range(n_blocks):
+        sl = slice(b * block_len, (b + 1) * block_len)
+        block_channels = {name: arr[sl] for name, arr in channels.items()}
+        block_results.append(compute_all_correlations(block_channels, dt, segments=segments, points_per_segment=points_per_segment, base=base))
+
+    errors = {}
+    for kind, result in full_results.items():
+        n_tau = len(result.tau)
+        err = np.full(n_tau, np.nan)
+        for i in range(n_tau):
+            vals = [br[kind].g[i] for br in block_results if kind in br and len(br[kind].g) > i]
+            if len(vals) >= 2:
+                err[i] = np.std(vals, ddof=1) / np.sqrt(len(vals))
+        errors[kind] = err
+    return errors

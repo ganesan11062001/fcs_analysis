@@ -21,6 +21,55 @@ def correlation_results_to_df(results):
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+def correlation_results_to_df_with_error(results, errors):
+    """Same long format as correlation_results_to_df, plus a per-point standard-error
+    column from core.correlate.compute_correlation_error. errors: dict[kind -> ndarray],
+    same length/order as each result's tau array."""
+    frames = []
+    for kind, result in results.items():
+        df = correlation_result_to_df(result)
+        df.insert(0, "kind", kind)
+        df["error"] = errors.get(kind)
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def correlation_results_to_vistavision_csv_text(results, errors, sampling_rate_hz, mean_rates):
+    """Reproduces VistaVision's exported [HeaderX]/[Data] file structure and its
+    tau,G,err column layout (one G+err pair per curve: CH1 autocorrelation, and if
+    dual-channel, CH2 autocorrelation and cross-correlation) -- for drop-in
+    familiarity with VistaVision's own correlation-export format.
+
+    mean_rates: list of mean count rates, [CH1] or [CH1, CH2], matching VistaVision's
+    header line 4.
+
+    Does NOT reproduce VistaVision's segment-boundary duplicate rows (where a coarser
+    segment's leading point(s) numerically coincide with the previous segment's
+    trailing point(s)) -- that's an undocumented internal quirk of VistaVision's
+    correlator, not part of the published multi-tau algorithm (manual section 13.4.1)
+    this app's engine is validated against, so it isn't reproduced here.
+    """
+    any_result = next(iter(results.values()))
+    lines = [
+        "[HeaderX]",
+        str(any_result.segments),
+        str(any_result.points_per_segment),
+        str(sampling_rate_hz),
+        ",".join(f"{r:.10g}" for r in mean_rates),
+        "[Data]",
+    ]
+    kinds_order = [k for k in ("acf_ch1", "acf_ch2", "cross") if k in results]
+    tau = results[kinds_order[0]].tau
+    for i in range(len(tau)):
+        row = [f"{tau[i]:.10g}"]
+        for kind in kinds_order:
+            row.append(f"{results[kind].g[i]:.10g}")
+            err = errors.get(kind)
+            row.append(f"{err[i]:.10g}" if err is not None and not pd.isna(err[i]) else "")
+        lines.append(",".join(row))
+    return "\n".join(lines) + "\n"
+
+
 def fit_result_to_df(fit_result, label=""):
     rows = []
     for name, value in fit_result.params.items():
