@@ -12,7 +12,7 @@ tied to any one binding pair or biological system.
 The live app above is deployed on Streamlit Community Cloud, tracking the `main` branch
 of this repo -- pushes to `main` redeploy it automatically within a couple of minutes.
 
-## Quick start (for any non-programmer labmate)
+## Quick start (no programming required)
 
 1. Double-click **`Launch_FCS_App.command`**.
    - First run: it sets up a local Python environment and installs dependencies
