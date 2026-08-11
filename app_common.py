@@ -52,7 +52,7 @@ def sidebar_about():
     a shared link to a sub-page, with no context from the Home page."""
     with st.sidebar:
         st.caption(
-            "**FCS/FCCS analysis for tau aggregation studies**\n\n"
+            "**General-purpose FCS/FCCS data analysis**\n\n"
             "Analyzes ISS VistaVision trace exports (CSV). See the Home page "
             "for an overview of all four steps."
         )
@@ -123,6 +123,12 @@ def time_window_selector(time_arr, key_prefix):
         max_value=t_max,
         value=(t_min, t_max),
         key=f"{key_prefix}_window_slider",
+        help=(
+            "Keeps only the intensity data between t0 and t1; everything outside is dropped "
+            "before binning/correlation. Impact: use this to cut out a bad segment (laser "
+            "drift, a bubble, focus loss) -- including bad data biases G(tau) at every lag, "
+            "since the correlator's normalization uses the whole kept trace's mean intensity."
+        ),
     )
     return t0, t1
 
@@ -214,7 +220,43 @@ def plot_fit_overlay(tau, g, fit_curve_arr, title="", color=None):
 
 def fit_settings_widgets(key_prefix, label):
     st.markdown(f"**{label} fit settings**")
-    n_components = st.radio("Components", [1, 2], key=f"{key_prefix}_ncomp", horizontal=True)
-    triplet = st.checkbox("Include triplet/blinking term", key=f"{key_prefix}_triplet")
-    n_starts = st.number_input("Multi-start attempts", min_value=1, max_value=20, value=5, key=f"{key_prefix}_nstarts")
+    n_components = st.radio(
+        "Components", [1, 2], key=f"{key_prefix}_ncomp", horizontal=True,
+        help=(
+            "How many diffusing species the model assumes.\n\n"
+            r"Formula: $G(\tau) = \frac{1}{N}\sum_i f_i D_i(\tau)$, $\sum_i f_i = 1$, "
+            r"$D_i(\tau) = \frac{1}{1+\tau/\tau_{Di}} \cdot \frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_{Di})}}$"
+            "\n\n"
+            "Impact: 1 component fits a single tau_D (one population size). 2 components "
+            "fits two independent tau_D's plus their amplitude split (f1/f2) -- use this if "
+            "the curve visibly has a fast and a slow decay (e.g. free monomer + aggregate). "
+            "More parameters also means more risk of an unstable/degenerate fit -- check the "
+            "stability badge after fitting."
+        ),
+    )
+    triplet = st.checkbox(
+        "Include triplet/blinking term", key=f"{key_prefix}_triplet",
+        help=(
+            "Adds a fast photophysical-blinking prefactor on top of the diffusion term.\n\n"
+            r"Formula: multiplies $G(\tau)$ by $\frac{1-T+T e^{-\tau/\tau_{trip}}}{1-T}$, with "
+            r"$\tau_{trip} \sim 1\,\mu s$."
+            "\n\n"
+            "Impact: only reshapes the fastest (leftmost) part of the curve. Turn on if you "
+            "see a fast decay at short tau that the diffusion term alone can't explain "
+            "(common with organic-dye triplet states). Leave off if your shortest tau is "
+            "already much longer than ~1 us, or it just adds an unconstrained nuisance "
+            "parameter."
+        ),
+    )
+    n_starts = st.number_input(
+        "Multi-start attempts", min_value=1, max_value=20, value=5, key=f"{key_prefix}_nstarts",
+        help=(
+            "How many independent random initial guesses are fit and compared.\n\n"
+            "Impact: this is purely a stability check, not part of G(tau)'s formula -- it "
+            "doesn't change a converged fit's best answer, but more starts make it more "
+            "likely to catch a fit that's actually unstable (parameters swing >20% depending "
+            "on starting guess, or <60% of starts converge at all). Increase this for "
+            "2-component fits, which are more prone to degenerate solutions than 1-component."
+        ),
+    )
     return n_components, triplet, n_starts

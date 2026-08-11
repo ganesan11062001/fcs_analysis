@@ -4,14 +4,15 @@
 
 A local, cross-platform (macOS Apple Silicon-native) tool for analyzing Fluorescence
 Correlation/Cross-Correlation Spectroscopy (FCS/FCCS) traces exported from an ISS
-VistaVision instrument, without needing VistaVision itself. Built for the tau-protein
-aggregation project (tau binding to NT vs. a BSA negative control, across a 0hr/3hr/48hr
-time course).
+VistaVision instrument, without needing VistaVision itself. General-purpose: single- or
+dual-channel autocorrelation/cross-correlation, diffusion-model fitting, FCCS bound
+fraction, Kd-from-concentration-series fitting, and batch/time-course processing -- not
+tied to any one binding pair or biological system.
 
 The live app above is deployed on Streamlit Community Cloud, tracking the `main` branch
 of this repo -- pushes to `main` redeploy it automatically within a couple of minutes.
 
-## Quick start (for Han / any non-programmer labmate)
+## Quick start (for any non-programmer labmate)
 
 1. Double-click **`Launch_FCS_App.command`**.
    - First run: it sets up a local Python environment and installs dependencies
@@ -35,11 +36,11 @@ Terminal; install from [python.org](https://www.python.org/downloads/macos/) if 
   term for grouping N raw points before correlating), run the multi-tau correlation
   engine, fit diffusion models to CH1/CH2 autocorrelation and the cross-correlation
   independently, and compute the FCCS bound fraction. Every stage is CSV-exportable.
-- **Batch / Time Course** — process a set of files (e.g. 0hr/3hr/48hr) with one shared
-  settings panel, producing a comparison table and plots.
+- **Batch / Time Course** — process a set of files (e.g. across conditions, replicates,
+  or timepoints) with one shared settings panel, producing a comparison table and plots.
 - **Kd Fitting** — fit a 1:1 binding isotherm (full quadratic/ligand-depletion form) to
-  bound-fraction-vs-[NT] data from a concentration series to extract Kd. Concentrations
-  are typed directly into an editable table per file.
+  bound-fraction-vs-ligand-concentration data from a concentration series to extract Kd.
+  Concentrations are typed directly into an editable table per file.
 - **Validation** — (A) re-run the exact-FFT-vs-multi-tau cross-check that the reference
   engine was originally validated against; (B) generate synthetic data with a known
   diffusion time and confirm the fitting pipeline recovers it, including an optional
@@ -50,7 +51,7 @@ Terminal; install from [python.org](https://www.python.org/downloads/macos/) if 
 - **No spectral crosstalk/bleed-through correction** in the FCCS bound-fraction
   calculation — it uses the standard uncorrected amplitude-ratio formula
   (`G_cross(0) / G_partner(0)`). Add crosstalk correction later using single-labeled
-  (NT-only / Tau-FL-only) reference files if bleed-through turns out to matter.
+  (CH1-only / CH2-only) reference files if bleed-through turns out to matter.
 - **No absolute diffusion coefficient or concentration** — no observation-volume
   calibration (beam waist `w_xy`) exists yet, so results are reported as diffusion time
   (`tau_D`) and fitted amplitude/N directly. `FitResult.calibration` is an explicit,

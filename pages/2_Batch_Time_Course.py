@@ -17,8 +17,9 @@ d = st.session_state["defaults"]
 
 st.title("Batch / Time Course Processing")
 st.caption(
-    "Process a set of files (e.g. 0hr / 3hr / 48hr) with one shared settings panel applied "
-    "identically to every file, and compare results across the series."
+    "Process a set of files (e.g. across conditions, replicates, or timepoints) with one "
+    "shared settings panel applied identically to every file, and compare results across "
+    "the series."
 )
 
 uploaded_files = st.file_uploader("Trace files", type=["csv"], accept_multiple_files=True)
@@ -95,8 +96,8 @@ with st.container(border=True):
                 g1 = amplitude_at_zero(fits["acf_ch1"].chosen_result)
                 g2 = amplitude_at_zero(fits["acf_ch2"].chosen_result)
                 gx = amplitude_at_zero(fits["cross"].chosen_result)
-                row["bound_fraction_tau_fl"] = bound_fraction_from_cross(gx, g1)
-                row["bound_fraction_nt"] = bound_fraction_from_cross(gx, g2)
+                row["bound_fraction_ch2_species"] = bound_fraction_from_cross(gx, g1)
+                row["bound_fraction_ch1_species"] = bound_fraction_from_cross(gx, g2)
 
             rows.append(row)
             batch_results[f.name] = {"trace": trace, "corr": corr, "fits": fits, "label": label}
@@ -126,14 +127,17 @@ with st.container(border=True):
         fig.update_layout(plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb", legend=dict(orientation="h"))
         plot_cols[0].plotly_chart(apply_chart_style(fig), width="stretch")
 
-    if "bound_fraction_tau_fl" in comp_df:
+    if "bound_fraction_ch2_species" in comp_df:
         melted2 = comp_df.melt(
-            id_vars=["label"], value_vars=["bound_fraction_tau_fl", "bound_fraction_nt"],
+            id_vars=["label"], value_vars=["bound_fraction_ch2_species", "bound_fraction_ch1_species"],
             var_name="species", value_name="bound_fraction",
         )
         fig2 = px.scatter(
             melted2, x="label", y="bound_fraction", color="species", title="Bound fraction vs. time course",
-            color_discrete_map={"bound_fraction_tau_fl": SERIES_COLORS["acf_ch2"], "bound_fraction_nt": SERIES_COLORS["acf_ch1"]},
+            color_discrete_map={
+                "bound_fraction_ch2_species": SERIES_COLORS["acf_ch2"],
+                "bound_fraction_ch1_species": SERIES_COLORS["acf_ch1"],
+            },
         )
         fig2.update_traces(marker=dict(size=9))
         fig2.update_layout(plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb", legend=dict(orientation="h"))

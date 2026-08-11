@@ -102,11 +102,11 @@ def stability_report_to_df(report, label=""):
     return df
 
 
-def fccs_result_to_df(bound_fraction_tau_fl, bound_fraction_nt, label=""):
+def fccs_result_to_df(bound_fraction_ch2_species, bound_fraction_ch1_species, label=""):
     return pd.DataFrame(
         [
-            {"label": label, "quantity": "bound_fraction_Tau-FL", "value": bound_fraction_tau_fl},
-            {"label": label, "quantity": "bound_fraction_NT_or_BSA", "value": bound_fraction_nt},
+            {"label": label, "quantity": "bound_fraction_ch2_species", "value": bound_fraction_ch2_species},
+            {"label": label, "quantity": "bound_fraction_ch1_species", "value": bound_fraction_ch1_species},
         ]
     )
 
@@ -127,7 +127,7 @@ def kd_result_to_df(concentrations, bound_fractions, kd_fit_result):
 
 def batch_comparison_to_df(rows):
     """rows: list of dicts, one per processed file, e.g.
-    {"label": "0hr", "tauD_ch1": ..., "tauD_ch2": ..., "bound_fraction_tau_fl": ...,
+    {"label": "sample_1", "tauD_ch1": ..., "tauD_ch2": ..., "bound_fraction_ch2_species": ...,
      "stable_ch1": True, "stable_ch2": True}. Simple passthrough to a DataFrame,
     kept as a function so the app's row-building convention lives in one place."""
     return pd.DataFrame(rows)

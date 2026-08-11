@@ -6,10 +6,11 @@ st.set_page_config(page_title="FCS/FCCS Analysis", layout="wide")
 init_defaults()
 sidebar_about()
 
-st.title("FCS/FCCS Analysis for Tau Aggregation Studies")
+st.title("FCS/FCCS Data Analysis")
 st.caption(
-    "Analyzes Fluorescence Correlation/Cross-Correlation Spectroscopy (FCS/FCCS) traces "
-    "exported from an ISS VistaVision instrument, without needing VistaVision itself."
+    "A general-purpose analysis tool for Fluorescence Correlation/Cross-Correlation "
+    "Spectroscopy (FCS/FCCS) traces exported from an ISS VistaVision instrument, without "
+    "needing VistaVision itself."
 )
 
 st.subheader("The pipeline, in four steps")
@@ -23,13 +24,13 @@ PAGE_CARDS = [
     ),
     (
         "2 · Batch / Time Course",
-        "Process a set of files (e.g. 0hr / 3hr / 48hr) with one shared settings panel, "
-        "and compare results across the series.",
+        "Process a set of files (e.g. across conditions, replicates, or timepoints) with "
+        "one shared settings panel, and compare results across the series.",
     ),
     (
         "3 · Kd Fitting",
-        "Fit a binding isotherm to bound-fraction-vs-[NT] data from a concentration "
-        "series to extract Kd.",
+        "Fit a binding isotherm to bound-fraction-vs-ligand-concentration data from a "
+        "concentration series to extract Kd.",
     ),
     (
         "4 · Validation",
@@ -44,6 +45,30 @@ for col, (title, desc) in zip(cols, PAGE_CARDS):
         st.markdown(f"**{title}**")
         st.caption(desc)
 
+with st.container(border=True):
+    st.subheader("How a single file moves through the pipeline")
+    st.markdown(
+        """
+1. **Load** — your CSV's time column + 1 or 2 intensity columns are read in.
+2. **Trim the time window** — cut out any bad stretch of the acquisition (laser drift,
+   focus loss); the kept region is shaded on the raw trace plot.
+3. **Bin points** *(optional)* — group N consecutive raw samples together before
+   correlating, to reduce shot noise. Leave at 1 to skip this.
+4. **Run the multi-tau correlation** — computes G(τ) for each channel (and the
+   cross-correlation, if dual-channel) on a log-spaced lag grid.
+5. **Fit a diffusion model** — choose 1 or 2 diffusing species (and an optional
+   triplet/blinking term) per channel, independently; get back τ_D and amplitude, with a
+   multi-start stability check that flags unstable/degenerate fits rather than silently
+   accepting them.
+6. **FCCS bound fraction** *(dual-channel only)* — combines the three fitted amplitudes
+   into the fraction of each species that's bound to the other.
+
+Every stage is CSV-exportable. See **Methodology** in the sidebar for the exact formula
+behind each step, and **Batch / Time Course** / **Kd Fitting** for running this pipeline
+across many files at once.
+        """
+    )
+
 st.subheader("Global defaults")
 st.caption(
     "Pre-fill settings on every page; each page lets you override them per file/run. "
@@ -53,12 +78,38 @@ st.caption(
 with st.container(border=True):
     col1, col2, col3, col4, col5 = st.columns(5)
     d = st.session_state["defaults"]
-    d["segments"] = col1.number_input("Segments", min_value=1, max_value=20, value=d["segments"])
-    d["points_per_segment"] = col2.number_input("Points/segment", min_value=1, max_value=100, value=d["points_per_segment"])
-    d["base"] = col3.number_input("Grouping base", min_value=2, max_value=16, value=d["base"])
-    d["kappa"] = col4.number_input("kappa (structure param, fixed)", min_value=0.1, value=d["kappa"], step=0.1)
+    d["segments"] = col1.number_input(
+        "Segments", min_value=1, max_value=20, value=d["segments"],
+        help=r"How many multi-tau blocks are computed (total $\tau$ points "
+        r"$= \text{segments} \times \text{points\_per\_segment}$). More segments extend how far "
+        "in tau the curve reaches; too many for a short trace adds low-reliability tail points instead.",
+    )
+    d["points_per_segment"] = col2.number_input(
+        "Points/segment", min_value=1, max_value=100, value=d["points_per_segment"],
+        help="Correlation points computed at each segment's lag spacing before coarsening "
+        "to the next segment. More = finer resolution per decade of tau. 15 is VistaVision's "
+        "own documented default.",
+    )
+    d["base"] = col3.number_input(
+        "Grouping base", min_value=2, max_value=16, value=d["base"],
+        help=r"Coarsening factor between segments: segment $k$'s lag step "
+        r"$\Delta t_k = \Delta t_{raw} \cdot \text{base}^k$. base=4 is the standard multi-tau "
+        "choice -- roughly quadruples tau spacing per segment for even log coverage. Larger = "
+        "fewer segments needed but coarser within-decade resolution.",
+    )
+    d["kappa"] = col4.number_input(
+        "kappa (structure param, fixed)", min_value=0.1, value=d["kappa"], step=0.1,
+        help=r"$\kappa = w_z/w_{xy}$, the axial:radial ratio of the detection volume. Used only "
+        r"in the fit model's diffusion term $\frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_D)}}$, not in "
+        r"computing $G(\tau)$ itself. Fixed rather than floated because it's badly degenerate with $\tau_D$ without "
+        "an independent volume calibration; a wrong value biases the fitted tauD, especially "
+        "at long tau. Typical confocal setups: ~3-6; 5.0 is a common default.",
+    )
     d["min_reliable_n_samples"] = col5.number_input(
-        "Min samples for a reliable tau point", min_value=1, value=d["min_reliable_n_samples"]
+        "Min samples for a reliable tau point", min_value=1, value=d["min_reliable_n_samples"],
+        help="Below this many averaged terms, a tau point is marked unreliable ('x' marker) "
+        "on the correlation plot. Display/QA only -- it never changes G(tau) itself, just "
+        "flags noisy long-tau points near the edge of your trace length.",
     )
     st.caption(
         "kappa has no calibration workflow yet (see README): tau_D and amplitude/N are "

@@ -1,9 +1,10 @@
 """
-core/kd.py — Kd extraction from a bound-fraction-vs-[NT] concentration series.
+core/kd.py — Kd extraction from a bound-fraction-vs-[ligand] concentration series.
 
 Uses the full quadratic 1:1 binding equation (accounts for ligand depletion), not
-the simple hyperbolic approximation, since [NT] and [Tau-FL] may be comparable in
-magnitude rather than [NT] always being in large excess.
+the simple hyperbolic approximation, since the titrated ligand and the fixed
+tracer may be comparable in magnitude rather than the ligand always being in
+large excess.
 """
 
 from dataclasses import dataclass
@@ -13,8 +14,8 @@ import lmfit
 
 
 def quadratic_binding_isotherm(L, Kd, T_total, Fmax=1.0, Fmin=0.0):
-    """Fraction of the fixed tracer (Tau-FL, total concentration T_total) that is
-    bound, as a function of total titrant concentration L ([NT]), for 1:1 binding:
+    """Fraction of the fixed tracer (total concentration T_total) that is
+    bound, as a function of total titrant/ligand concentration L, for 1:1 binding:
 
         f_bound(L) = Fmin + (Fmax-Fmin) *
             ((Kd+T_total+L) - sqrt((Kd+T_total+L)^2 - 4*T_total*L)) / (2*T_total)
@@ -43,7 +44,7 @@ class KdFitResult:
 def fit_kd(concentrations, bound_fractions, T_total, fit_baseline=False):
     """Fit the quadratic binding isotherm to (concentration, bound_fraction) points.
 
-    T_total (the fixed Tau-FL tracer concentration) is held fixed, not floated.
+    T_total (the fixed tracer concentration) is held fixed, not floated.
     Fmax/Fmin are fixed at 1/0 unless fit_baseline=True.
     """
     L = np.asarray(concentrations, dtype=np.float64)
