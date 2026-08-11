@@ -1,5 +1,5 @@
 """
-app_common.py — shared helpers used by app.py and pages/*.py.
+app_common.py — shared helpers used by Home.py and pages/*.py.
 
 Kept at the project root (not inside core/) since this is UI-specific glue code
 (Streamlit caching, plotting conventions) that core/ should stay free of.
