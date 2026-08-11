@@ -22,4 +22,4 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 
 echo "Starting FCS/FCCS Analysis app..."
-"$VENV_DIR/bin/streamlit" run "$APP_DIR/Home.py"
+"$VENV_DIR/bin/streamlit" run "$APP_DIR/app.py"

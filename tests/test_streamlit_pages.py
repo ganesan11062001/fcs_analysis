@@ -26,7 +26,7 @@ def _make_single_channel_csv_bytes(n=3000, dt=1e-4, seed=1):
 
 
 def test_home_page_renders():
-    at = AppTest.from_file("Home.py")
+    at = AppTest.from_file("app.py")
     at.run(timeout=30)
     assert not at.exception
 
