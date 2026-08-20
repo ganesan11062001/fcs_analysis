@@ -6,6 +6,7 @@ from app_common import (
     sidebar_about,
     load_trace_cached,
     run_auto_window_search_cached,
+    window_length_options_for_trace,
     plot_raw_trace_with_window,
     plot_correlation_curve,
     plot_fit_overlay,
@@ -33,8 +34,9 @@ d = st.session_state["defaults"]
 
 st.title("Single File Analysis")
 st.caption(
-    "Upload a trace and the app automatically finds the cleanest time window and generates "
-    "the autocorrelation / cross-correlation curve -- no manual trimming required."
+    "Upload a trace, tell the app how long a window to correlate, and it automatically "
+    "slides that window across the whole acquisition to find the cleanest stretch -- no "
+    "manual trimming required."
 )
 
 uploaded = st.file_uploader("VistaVision trace export (single- or dual-channel CSV)", type=["csv"])
@@ -52,6 +54,23 @@ info_cols[3].metric("Raw sampling rate", f"{1.0 / trace.dt:,.0f} Hz")
 
 if trace.used_fallback_parser:
     st.warning(f"Fast parser was bypassed for this file: {trace.fallback_reason}")
+
+t_min, t_max = float(trace.time[0]), float(trace.time[-1])
+window_options = window_length_options_for_trace(t_min, t_max)
+window_length_s = st.selectbox(
+    "Time period per window (s)",
+    options=window_options,
+    index=len(window_options) // 2,
+    key="sf_window_length_s",
+    help=(
+        "The app slides a window of this length across the whole trace in 1-second steps "
+        "(0-L, 1-(1+L), 2-(2+L), ... to the end) and automatically keeps the step with the "
+        "cleanest correlation curve. Pick a period comparable to how long you'd expect the "
+        "signal to stay stable -- shorter periods give more candidates to choose from but "
+        "each has less data (noisier); longer periods have less noise per window but fewer "
+        "candidates to pick from."
+    ),
+)
 
 with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4.1)"):
     c1, c2, c3 = st.columns(3)
@@ -109,13 +128,13 @@ with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4
         ),
     )
 
-run_id = (uploaded.name, uploaded.size, segments, points_per_segment, base, bin_points, n_blocks)
+run_id = (uploaded.name, uploaded.size, window_length_s, segments, points_per_segment, base, bin_points, n_blocks)
 if st.session_state.get("sf_run_id") != run_id:
     st.session_state["sf_run_id"] = run_id
     st.session_state.pop("sf_fit_results", None)
 
 auto = run_auto_window_search_cached(
-    uploaded.getvalue(), uploaded.name, segments, points_per_segment, base, bin_points, n_blocks
+    uploaded.getvalue(), uploaded.name, window_length_s, segments, points_per_segment, base, bin_points, n_blocks
 )
 chosen = auto.chosen
 
@@ -123,8 +142,9 @@ with st.container(border=True):
     st.subheader("1. Automatically selected time window")
     st.plotly_chart(plot_raw_trace_with_window(trace.time, trace.channels, chosen.t0, chosen.t1), width="stretch")
     st.caption(
-        f"Evaluated {len(auto.candidates)} candidate windows (full trace, first/middle/second half) "
-        f"and kept **{chosen.label}** (t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)}) "
+        f"Slid a {window_length_s}s window across the trace in 1s steps, evaluated "
+        f"{len(auto.candidates)} candidates, and kept **{chosen.label}** "
+        f"(t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)}) "
         f"-- the one with the highest correlation-curve signal-to-noise ratio."
     )
     with st.expander("Why this window? (all candidates)"):

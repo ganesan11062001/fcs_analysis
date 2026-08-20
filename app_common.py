@@ -100,16 +100,30 @@ def load_trace_cached(file_bytes, filename):
         os.unlink(tmp_path)
 
 
-@st.cache_data(show_spinner="Scanning the trace for the cleanest time window...")
-def run_auto_window_search_cached(file_bytes, filename, segments, points_per_segment, base, bin_points, n_blocks):
+@st.cache_data(show_spinner="Sliding the window across the trace to find the cleanest stretch...")
+def run_auto_window_search_cached(
+    file_bytes, filename, window_length_s, segments, points_per_segment, base, bin_points, n_blocks
+):
     """Cached so re-running the page (e.g. clicking a fit button) doesn't redo the
-    4-candidate window search -- only a change to the file or a settings value does."""
+    sliding-window search -- only a change to the file or a settings value does."""
     trace = load_trace_cached(file_bytes, filename)
     return search_best_window(
-        trace.time, trace.channels,
+        trace.time, trace.channels, window_length_s=window_length_s,
         segments=segments, points_per_segment=points_per_segment, base=base,
         bin_points=bin_points, n_blocks=n_blocks,
     )
+
+
+WINDOW_LENGTH_OPTIONS_S = [1, 2, 3, 5, 10, 15, 20, 30, 60]
+
+
+def window_length_options_for_trace(t_min, t_max):
+    """Only offer window lengths that actually fit at least twice in the trace
+    (so the slide has room to move); falls back to the whole-trace span if
+    even the smallest fixed option doesn't fit at all."""
+    span = t_max - t_min
+    options = [opt for opt in WINDOW_LENGTH_OPTIONS_S if opt <= span]
+    return options or [span]
 
 
 def decimate_for_display(time_arr, y_arr, max_points=5000):

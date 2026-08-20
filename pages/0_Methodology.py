@@ -44,20 +44,25 @@ with st.container(border=True):
 with st.container(border=True):
     st.subheader("2. Automatic time-window selection")
     st.markdown(
-        "Instead of asking you to eyeball and drag a time-window trim, the app evaluates a "
-        "small, fixed set of candidate windows -- the **full trace**, and the **first half**, "
-        "**middle half**, and **second half** of it -- and keeps whichever produces the "
-        "cleanest correlation curve. Cleanliness is scored as the median signal-to-noise "
-        "ratio across tau, using the sub-block error estimate from step 4:"
+        "Instead of asking you to eyeball and drag a time-window trim, you pick a **window "
+        "length** L (a dropdown, e.g. 3 s), and the app slides a window of that length across "
+        "the whole acquisition in fixed 1-second steps:"
+    )
+    st.latex(r"[0, L),\ [1, 1{+}L),\ [2, 2{+}L),\ \dots\ \text{up to the end of the trace}")
+    st.markdown(
+        "Every one of those candidate windows is correlated, and the app keeps whichever "
+        "produces the cleanest correlation curve. Because every candidate is the same length, "
+        "the comparison is apples-to-apples. Cleanliness is scored as the median "
+        "signal-to-noise ratio across tau, using the sub-block error estimate from step 4:"
     )
     st.latex(r"\text{SNR} = \operatorname{median}_\tau \frac{|G(\tau)|}{\sigma_{G(\tau)}}")
     st.markdown(
         "For a dual-channel trace, the score is averaged across CH1, CH2, and the "
         "cross-correlation. A candidate window is skipped if it's too short to split into "
-        "the configured number of sub-blocks. This is a fixed 4-candidate grid search, not an "
-        "exhaustive scan -- it targets the common case of a bad stretch at the very start or "
-        "end of acquisition (photobleaching, focus drift, a bubble), not arbitrary trace-quality "
-        "problems."
+        "the configured number of sub-blocks. This is a fixed grid search over one window "
+        "length at a time, not an exhaustive scan over all possible lengths -- it targets "
+        "finding the cleanest stretch of a given duration, not solving arbitrary "
+        "trace-quality problems."
     )
 
 with st.container(border=True):
