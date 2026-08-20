@@ -127,8 +127,22 @@ with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4
             "but needs a longer trace per candidate window."
         ),
     )
+    kappa = st.number_input(
+        "kappa / w (structure parameter, fixed)", min_value=0.1, value=d["kappa"], step=0.1, key="sf_kappa",
+        help=(
+            r"$\kappa = w_z/w_{xy}$, the axial:radial ratio of your confocal detection volume "
+            r"(sometimes just called $w$). Used only in the fit model's diffusion term "
+            r"$\frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_D)}}$, not in computing G(tau) itself.\n\n"
+            "Fixed rather than floated because it's badly degenerate with tau_D without an "
+            "independent volume calibration -- a wrong value biases the fitted tau_D, especially "
+            "at long tau. Typical confocal setups: ~3-6. Overrides the Home page's global default "
+            "for this session/page only."
+        ),
+    )
 
-run_id = (uploaded.name, uploaded.size, window_length_s, segments, points_per_segment, base, bin_points, n_blocks)
+run_id = (
+    uploaded.name, uploaded.size, window_length_s, segments, points_per_segment, base, bin_points, n_blocks, kappa,
+)
 
 auto = run_auto_window_search_cached(
     uploaded.getvalue(), uploaded.name, window_length_s, segments, points_per_segment, base, bin_points, n_blocks
@@ -252,7 +266,7 @@ with st.container(border=True):
                 with st.spinner(f"Fitting {label} ({n_starts} starts)..."):
                     report = multi_start_fit(
                         results[kind].tau, results[kind].g, n_components=n_components, triplet=triplet,
-                        n_starts=n_starts, kappa=d["kappa"],
+                        n_starts=n_starts, kappa=kappa,
                     )
                 fit_results[kind] = report
             if kind in fit_results:
