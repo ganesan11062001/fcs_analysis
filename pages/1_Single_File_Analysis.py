@@ -129,25 +129,55 @@ with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4
     )
 
 run_id = (uploaded.name, uploaded.size, window_length_s, segments, points_per_segment, base, bin_points, n_blocks)
-if st.session_state.get("sf_run_id") != run_id:
-    st.session_state["sf_run_id"] = run_id
-    st.session_state.pop("sf_fit_results", None)
 
 auto = run_auto_window_search_cached(
     uploaded.getvalue(), uploaded.name, window_length_s, segments, points_per_segment, base, bin_points, n_blocks
 )
-chosen = auto.chosen
+best = auto.chosen
+valid_candidates = [c for c in auto.candidates if not c.failed]
+if not valid_candidates:
+    st.error(
+        "Every candidate window was too short to score (not enough data for the configured "
+        "number of sub-blocks). Try a shorter window length or fewer sub-blocks in Advanced settings."
+    )
+    st.stop()
+
+
+def _option_label(c):
+    tag = " -- auto-picked" if c.label == best.label else ""
+    return f"{c.label} (SNR {c.score:.3g}){tag}"
+
+
+option_labels = [_option_label(c) for c in valid_candidates]
+label_lookup = dict(zip(option_labels, valid_candidates))
+default_option = _option_label(best)
+
+if st.session_state.get("sf_run_id") != run_id:
+    st.session_state["sf_run_id"] = run_id
+    st.session_state.pop("sf_fit_results", None)
+    st.session_state["sf_window_choice"] = default_option
 
 with st.container(border=True):
-    st.subheader("1. Automatically selected time window")
+    st.subheader("1. Time window")
+    selected_option = st.selectbox(
+        "Window to use",
+        options=option_labels,
+        key="sf_window_choice",
+        help=(
+            "Defaults to the auto-picked window (highest correlation-curve signal-to-noise "
+            "ratio among all candidates from the sliding search). Pick any other candidate "
+            "to use it instead -- the curve, fit, and exports below all update to match "
+            "whichever window is selected here."
+        ),
+    )
+    chosen = label_lookup[selected_option]
     st.plotly_chart(plot_raw_trace_with_window(trace.time, trace.channels, chosen.t0, chosen.t1), width="stretch")
     st.caption(
-        f"Slid a {window_length_s}s window across the trace in 1s steps, evaluated "
-        f"{len(auto.candidates)} candidates, and kept **{chosen.label}** "
-        f"(t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)}) "
-        f"-- the one with the highest correlation-curve signal-to-noise ratio."
+        f"Slid a {window_length_s}s window across the trace in 1s steps and evaluated "
+        f"{len(auto.candidates)} candidates (t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)} "
+        f"currently selected)."
     )
-    with st.expander("Why this window? (all candidates)"):
+    with st.expander(f"All {len(auto.candidates)} candidates"):
         cand_df = pd.DataFrame(
             [
                 {
@@ -155,7 +185,8 @@ with st.container(border=True):
                     "t0 (s)": c.t0,
                     "t1 (s)": c.t1,
                     "SNR score": c.score if not c.failed else None,
-                    "chosen": c is chosen,
+                    "auto-picked": c.label == best.label,
+                    "currently selected": c.label == chosen.label,
                     "skipped": c.failed,
                 }
                 for c in auto.candidates
