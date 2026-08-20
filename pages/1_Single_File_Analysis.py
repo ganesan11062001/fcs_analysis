@@ -213,6 +213,33 @@ with st.container(border=True):
             "sub-blocks. See the Methodology page for the exact formula."
         )
 
+    with st.expander(f"View all {len(valid_candidates)} candidate curves"):
+        st.caption("Click \"Use this window\" under any plot to switch the selection above to it.")
+        grid_cols = st.columns(3)
+        for i, c in enumerate(valid_candidates):
+            with grid_cols[i % 3]:
+                with st.container(border=True):
+                    tags = []
+                    if c.label == best.label:
+                        tags.append("auto-picked")
+                    if c.label == chosen.label:
+                        tags.append("selected")
+                    title = c.label + (f" ({', '.join(tags)})" if tags else "")
+                    fig, _ = plot_correlation_curve(
+                        c.corr_results, d["min_reliable_n_samples"], title=title, height=260
+                    )
+                    st.plotly_chart(fig, width="stretch", key=f"sf_grid_plot_{c.label}")
+                    st.caption(f"SNR {c.score:.3g}")
+                    if c.label != chosen.label:
+                        # Setting st.session_state[key] for an already-instantiated widget raises --
+                        # must be done in an on_click callback, which runs before the rerun, not here.
+                        st.button(
+                            "Use this window", key=f"sf_grid_use_{c.label}",
+                            on_click=lambda opt=_option_label(c): st.session_state.update(sf_window_choice=opt),
+                        )
+                    else:
+                        st.caption("Currently selected")
+
 results = chosen.corr_results
 errors = chosen.corr_errors
 

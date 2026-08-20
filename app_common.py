@@ -195,7 +195,7 @@ def plot_raw_trace_with_window(time_arr, channels, t0, t1, max_points=5000):
     return apply_chart_style(fig)
 
 
-def plot_correlation_curve(results, min_reliable_n_samples, title=""):
+def plot_correlation_curve(results, min_reliable_n_samples, title="", height=400):
     """Semilog-x G(tau) plot (tau log-scale, G linear -- not log-log, since G can
     go negative at long lags from noise). Points below the reliability threshold
     are shown with a distinct marker so long-tau statistical unreliability is
@@ -229,7 +229,7 @@ def plot_correlation_curve(results, min_reliable_n_samples, title=""):
     fig.update_xaxes(type="log", title="tau (s)")
     fig.update_yaxes(title="G(tau)")
     fig.update_layout(
-        title=title, height=400, margin=dict(l=10, r=10, t=40, b=10),
+        title=title, height=height, margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h"), plot_bgcolor="#fcfcfb", paper_bgcolor="#fcfcfb",
     )
     return apply_chart_style(fig), any_unreliable
