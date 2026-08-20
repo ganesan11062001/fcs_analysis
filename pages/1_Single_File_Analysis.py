@@ -1,22 +1,19 @@
+import pandas as pd
 import streamlit as st
 
 from app_common import (
     init_defaults,
     sidebar_about,
     load_trace_cached,
+    run_auto_window_search_cached,
     plot_raw_trace_with_window,
-    time_window_selector,
-    window_channels,
     plot_correlation_curve,
     plot_fit_overlay,
     fit_settings_widgets,
     format_seconds,
     SERIES_COLORS,
 )
-import numpy as np
 
-from core.binning import apply_point_binning
-from core.correlate import compute_all_correlations, compute_correlation_error
 from core.fitting import multi_start_fit
 from core.fccs import bound_fraction_from_cross, amplitude_at_zero
 from core.export import (
@@ -35,7 +32,10 @@ sidebar_about()
 d = st.session_state["defaults"]
 
 st.title("Single File Analysis")
-st.caption("Load one trace, trim it, correlate, and fit -- the core single-file pipeline.")
+st.caption(
+    "Upload a trace and the app automatically finds the cleanest time window and generates "
+    "the autocorrelation / cross-correlation curve -- no manual trimming required."
+)
 
 uploaded = st.file_uploader("VistaVision trace export (single- or dual-channel CSV)", type=["csv"])
 if uploaded is None:
@@ -43,7 +43,6 @@ if uploaded is None:
     st.stop()
 
 trace = load_trace_cached(uploaded.getvalue(), uploaded.name)
-st.session_state["sf_trace"] = trace
 
 info_cols = st.columns(4)
 info_cols[0].metric("Channels", trace.n_channels)
@@ -54,38 +53,7 @@ info_cols[3].metric("Raw sampling rate", f"{1.0 / trace.dt:,.0f} Hz")
 if trace.used_fallback_parser:
     st.warning(f"Fast parser was bypassed for this file: {trace.fallback_reason}")
 
-with st.container(border=True):
-    st.subheader("1. Trim the time window")
-    t0, t1 = time_window_selector(trace.time, "sf")
-    st.plotly_chart(plot_raw_trace_with_window(trace.time, trace.channels, t0, t1), width="stretch")
-
-windowed_time, windowed_channels = window_channels(trace.time, trace.channels, t0, t1)
-
-with st.container(border=True):
-    st.subheader("2. Binning points")
-    bin_points = st.number_input(
-        "Binning points (group N raw points together before correlating)", min_value=1, value=1, key="sf_bin_points",
-        help=(
-            "Groups N consecutive raw samples into one averaged point BEFORE correlating "
-            "(separate from the multi-tau engine's own segments/points-per-segment/base "
-            "coarsening below, which happens after this step).\n\n"
-            r"Formula: $\Delta t_{eff} = \Delta t_{raw} \cdot N$, $\ f_{eff} = 1/\Delta t_{eff}$, where "
-            r"$\Delta t_{raw}$ is read directly from your CSV's time column. N=1 means no binning is "
-            "applied at all -- the 'effective rate' shown below is then just your file's own "
-            "raw acquisition rate (e.g. a file recorded at 10 us/point reports 100,000 Hz "
-            "here for that reason alone, not because anything was chosen or binned).\n\n"
-            "Impact: binning reduces shot-noise per point (fewer, coarser, less noisy points) "
-            r"but also blurs out any real correlation decay faster than $\Delta t_{eff}$ -- so N "
-            r"should stay well below your fastest expected $\tau_D$, or you'll wash out the "
-            "signal you're trying to measure. Most FCS analyses leave this at 1 and let the "
-            "multi-tau engine's own coarsening (below) do all the log-spacing."
-        ),
-    )
-    _, binned_channels, effective_dt, effective_rate = apply_point_binning(windowed_time, windowed_channels, bin_points)
-    st.caption(f"Effective sampling rate after binning: **{effective_rate:,.1f} Hz** (dt = {format_seconds(effective_dt)})")
-
-with st.container(border=True):
-    st.subheader("3. Multi-tau correlation settings")
+with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4.1)"):
     c1, c2, c3 = st.columns(3)
     segments = c1.number_input(
         "Segments", min_value=1, max_value=20, value=d["segments"], key="sf_segments",
@@ -95,10 +63,8 @@ with st.container(border=True):
             r"Formula: total $\tau$ points $= \text{segments} \times \text{points\_per\_segment}$; "
             r"segment $k$'s lag step $\Delta t_k = \Delta t_{raw} \cdot \text{base}^k$."
             "\n\n"
-            "Impact: more segments extend how far out in tau the curve reaches (needed to "
-            "see the decay fully return to baseline), but each extra segment needs "
-            "proportionally more raw trace length to fill with real data -- too many for a "
-            "short trace just adds tau points with very low n_samples (flagged unreliable)."
+            "Impact: more segments extend how far out in tau the curve reaches, but each "
+            "extra segment needs proportionally more trace length to fill with real data."
         ),
     )
     points_per_segment = c2.number_input(
@@ -109,59 +75,84 @@ with st.container(border=True):
             r"Formula: within segment $k$, points are computed at lags "
             r"$\tau = \Delta t_{raw} \cdot \text{base}^k \cdot i$, for $i = 1, \dots, \text{points\_per\_segment}$."
             "\n\n"
-            "Impact: more points per segment gives finer resolution within each decade of "
-            "tau, at the cost of more compute per correlation run. 15 is VistaVision's own "
-            "documented default (manual sec. 13.4.1) and is the standard choice."
+            "15 is VistaVision's own documented default (manual sec. 13.4.1)."
         ),
     )
     base = c3.number_input(
         "Grouping base", min_value=2, max_value=16, value=d["base"], key="sf_base",
         help=(
-            "The coarsening factor applied to the lag spacing between successive "
-            "segments.\n\n"
+            "The coarsening factor applied to the lag spacing between successive segments.\n\n"
             r"Formula: segment $k$'s effective $\Delta t_k = \Delta t_{raw} \cdot \text{base}^k$."
             "\n\n"
-            "Impact: base=4 (the standard multi-tau choice) roughly quadruples the tau "
-            "spacing each segment, giving even log-spaced coverage across many decades of "
-            "tau without needing hundreds of segments. A larger base covers more decades "
-            "per segment but coarsens (loses within-decade resolution) faster."
+            "base=4 (the standard multi-tau choice) roughly quadruples the tau spacing each "
+            "segment, giving even log-spaced coverage across many decades of tau."
+        ),
+    )
+    c4, c5 = st.columns(2)
+    bin_points = c4.number_input(
+        "Binning points (group N raw points together before correlating)", min_value=1, value=1, key="sf_bin_points",
+        help=(
+            "Groups N consecutive raw samples into one averaged point BEFORE correlating.\n\n"
+            r"Formula: $\Delta t_{eff} = \Delta t_{raw} \cdot N$. N=1 means no binning is applied "
+            "at all.\n\n"
+            "Impact: binning reduces shot-noise per point but also blurs out any real "
+            r"correlation decay faster than $\Delta t_{eff}$ -- most FCS analyses leave this at 1."
+        ),
+    )
+    n_blocks = c5.number_input(
+        "Sub-blocks for error estimate / window scoring", min_value=2, max_value=50, value=5, key="sf_n_blocks",
+        help=(
+            "Used two ways: (1) the per-point error bars on the final curve, and (2) scoring "
+            "each candidate time window during the automatic search below (higher "
+            "signal-to-noise = cleaner window). More sub-blocks = a more stable error estimate "
+            "but needs a longer trace per candidate window."
         ),
     )
 
-    estimate_error = st.checkbox(
-        "Also estimate per-point error (sub-block standard error)", value=True, key="sf_estimate_error",
-        help="Splits the trace into N contiguous sub-blocks, correlates each independently, and uses the "
-        "spread across sub-blocks as each tau point's uncertainty -- the standard block-averaging convention "
-        "used broadly across FCS correlator software. Roughly doubles compute time for this step.",
-    )
-    n_blocks = st.number_input(
-        "Number of sub-blocks", min_value=2, max_value=50, value=10, key="sf_n_blocks", disabled=not estimate_error
-    )
+run_id = (uploaded.name, uploaded.size, segments, points_per_segment, base, bin_points, n_blocks)
+if st.session_state.get("sf_run_id") != run_id:
+    st.session_state["sf_run_id"] = run_id
+    st.session_state.pop("sf_fit_results", None)
 
-    if st.button("Run correlation", type="primary"):
-        with st.spinner("Running multi-tau correlation..."):
-            corr_results = compute_all_correlations(
-                binned_channels, effective_dt, segments=segments, points_per_segment=points_per_segment, base=base
-            )
-            corr_errors = {}
-            if estimate_error:
-                corr_errors = compute_correlation_error(
-                    corr_results, binned_channels, effective_dt,
-                    segments=segments, points_per_segment=points_per_segment, base=base, n_blocks=n_blocks,
-                )
-        st.session_state["sf_corr_results"] = corr_results
-        st.session_state["sf_corr_errors"] = corr_errors
-        st.session_state["sf_mean_rates"] = [float(np.mean(arr)) / effective_dt for arr in binned_channels.values()]
-        st.session_state["sf_sampling_rate_hz"] = 1.0 / effective_dt
-        st.session_state.pop("sf_fit_results", None)
-
-if "sf_corr_results" not in st.session_state:
-    st.stop()
-
-results = st.session_state["sf_corr_results"]
+auto = run_auto_window_search_cached(
+    uploaded.getvalue(), uploaded.name, segments, points_per_segment, base, bin_points, n_blocks
+)
+chosen = auto.chosen
 
 with st.container(border=True):
-    st.subheader("4. Correlation curves")
+    st.subheader("1. Automatically selected time window")
+    st.plotly_chart(plot_raw_trace_with_window(trace.time, trace.channels, chosen.t0, chosen.t1), width="stretch")
+    st.caption(
+        f"Evaluated {len(auto.candidates)} candidate windows (full trace, first/middle/second half) "
+        f"and kept **{chosen.label}** (t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)}) "
+        f"-- the one with the highest correlation-curve signal-to-noise ratio."
+    )
+    with st.expander("Why this window? (all candidates)"):
+        cand_df = pd.DataFrame(
+            [
+                {
+                    "window": c.label,
+                    "t0 (s)": c.t0,
+                    "t1 (s)": c.t1,
+                    "SNR score": c.score if not c.failed else None,
+                    "chosen": c is chosen,
+                    "skipped": c.failed,
+                }
+                for c in auto.candidates
+            ]
+        )
+        st.dataframe(cand_df, width="stretch", hide_index=True)
+        st.caption(
+            "SNR score = median |G(tau)| / standard-error(tau) across the curve (higher = cleaner). "
+            "A window is skipped if it's too short to split into the configured number of "
+            "sub-blocks. See the Methodology page for the exact formula."
+        )
+
+results = chosen.corr_results
+errors = chosen.corr_errors
+
+with st.container(border=True):
+    st.subheader("2. Correlation curves")
     fig, any_unreliable = plot_correlation_curve(results, d["min_reliable_n_samples"], title=uploaded.name)
     st.plotly_chart(fig, width="stretch")
     if any_unreliable:
@@ -170,7 +161,6 @@ with st.container(border=True):
             "(long-tau statistical unreliability, especially near the edge of the acquisition window)."
         )
 
-    errors = st.session_state.get("sf_corr_errors", {})
     dl_cols = st.columns(3)
     dl_cols[0].download_button(
         "Download correlation curves (CSV)",
@@ -182,17 +172,12 @@ with st.container(border=True):
         "Download with error (CSV)",
         df_to_csv_bytes(correlation_results_to_df_with_error(results, errors)),
         file_name=f"{uploaded.name}_correlation_with_error.csv",
-        disabled=not errors,
-        help="Same as above plus a per-point standard-error column (enable the error "
-        "estimate checkbox above and re-run correlation if this is disabled)."
-        if not errors else "tau, G(tau), error, n_samples per curve.",
+        help="tau, G(tau), error, n_samples per curve.",
     )
     dl_cols[2].download_button(
         "Download (VistaVision format)",
         correlation_results_to_vistavision_csv_text(
-            results, errors,
-            sampling_rate_hz=st.session_state.get("sf_sampling_rate_hz", 1.0 / effective_dt),
-            mean_rates=st.session_state.get("sf_mean_rates", []),
+            results, errors, sampling_rate_hz=1.0 / chosen.eff_dt, mean_rates=chosen.mean_rates,
         ),
         file_name=f"{uploaded.name}_correlation_vistavision.csv",
         help="Matches VistaVision's [HeaderX]/[Data] structure and tau,G,err column layout. Does NOT "
@@ -201,7 +186,7 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("5. Model fitting")
+    st.subheader("3. Model fitting (optional)")
     fit_results = st.session_state.setdefault("sf_fit_results", {})
 
     fit_panels = [("acf_ch1", "CH1 autocorrelation"), ("acf_ch2", "CH2 autocorrelation"), ("cross", "Cross-correlation")]
@@ -246,7 +231,7 @@ with st.container(border=True):
 
 if "acf_ch1" in fit_results and "acf_ch2" in fit_results and "cross" in fit_results:
     with st.container(border=True):
-        st.subheader("6. FCCS bound fraction")
+        st.subheader("4. FCCS bound fraction")
         g_ch1_0 = amplitude_at_zero(fit_results["acf_ch1"].chosen_result)
         g_ch2_0 = amplitude_at_zero(fit_results["acf_ch2"].chosen_result)
         g_x_0 = amplitude_at_zero(fit_results["cross"].chosen_result)

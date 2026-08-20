@@ -17,7 +17,8 @@ with st.container(border=True):
     st.markdown(
         """
 1. **Load** — parse the CSV's time column + 1 or 2 intensity columns.
-2. **Trim** — optionally cut the time window analyzed.
+2. **Auto-select the time window** — evaluate a few candidate windows and keep the
+   cleanest one, no manual trimming needed.
 3. **Bin** *(optional)* — group N raw points together before correlating.
 4. **Correlate** — compute the autocorrelation of each channel, and (if 2 channels) the
    symmetrized cross-correlation, on a multi-tau lag grid.
@@ -41,7 +42,26 @@ with st.container(border=True):
     st.latex(r"G_\times(\tau) = \tfrac{1}{2}\left[G_{1\to2}(\tau) + G_{2\to1}(\tau)\right]")
 
 with st.container(border=True):
-    st.subheader("2. Multi-tau lag grid")
+    st.subheader("2. Automatic time-window selection")
+    st.markdown(
+        "Instead of asking you to eyeball and drag a time-window trim, the app evaluates a "
+        "small, fixed set of candidate windows -- the **full trace**, and the **first half**, "
+        "**middle half**, and **second half** of it -- and keeps whichever produces the "
+        "cleanest correlation curve. Cleanliness is scored as the median signal-to-noise "
+        "ratio across tau, using the sub-block error estimate from step 4:"
+    )
+    st.latex(r"\text{SNR} = \operatorname{median}_\tau \frac{|G(\tau)|}{\sigma_{G(\tau)}}")
+    st.markdown(
+        "For a dual-channel trace, the score is averaged across CH1, CH2, and the "
+        "cross-correlation. A candidate window is skipped if it's too short to split into "
+        "the configured number of sub-blocks. This is a fixed 4-candidate grid search, not an "
+        "exhaustive scan -- it targets the common case of a bad stretch at the very start or "
+        "end of acquisition (photobleaching, focus drift, a bubble), not arbitrary trace-quality "
+        "problems."
+    )
+
+with st.container(border=True):
+    st.subheader("3. Multi-tau lag grid")
     st.markdown(
         "Rather than evaluating every lag linearly (too slow for million-point traces), "
         "lags are grouped into **segments**, each coarser than the last by a fixed **base**:"
@@ -56,7 +76,7 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("3. Per-point error (optional)")
+    st.subheader("4. Per-point error (optional)")
     st.markdown(
         "The trace is split into **N contiguous sub-blocks**; each is independently run "
         "through steps 1–2 with identical settings. The uncertainty at each τ is the "
@@ -69,7 +89,7 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("4. Diffusion model (the fit)")
+    st.subheader("5. Diffusion model (the fit)")
     st.markdown("Standard confocal 3D-diffusion model, for a single diffusing species:")
     st.latex(
         r"G(\tau) = \frac{1}{N} \cdot \frac{1}{1+\tau/\tau_D} \cdot "
@@ -88,7 +108,7 @@ with st.container(border=True):
     st.latex(r"G(\tau) \;\leftarrow\; G(\tau)\cdot \frac{1-T+T\,e^{-\tau/\tau_{trip}}}{1-T}")
 
 with st.container(border=True):
-    st.subheader("5. FCCS bound fraction")
+    st.subheader("6. FCCS bound fraction")
     st.markdown(
         "Combines the fitted zero-lag amplitudes of both autocorrelations and the "
         "cross-correlation (uncorrected amplitude-ratio form — no spectral crosstalk "
@@ -98,7 +118,7 @@ with st.container(border=True):
     st.latex(r"f_{\text{bound, CH1 species}} = \frac{G_\times(0)}{G_{\text{CH2}}(0)}")
 
 with st.container(border=True):
-    st.subheader("6. Kd — binding isotherm")
+    st.subheader("7. Kd — binding isotherm")
     st.markdown(
         "Fits bound fraction vs. ligand concentration $L$ to the full quadratic 1:1 "
         "binding equation (accounts for ligand depletion, valid even when $L$ and the "
@@ -111,6 +131,6 @@ with st.container(border=True):
     )
 
 st.caption(
-    "Correctness of the correlation step (sections 1–2) is checked against a brute-force "
+    "Correctness of the correlation step (sections 1 and 3) is checked against a brute-force "
     "FFT correlation and a synthetic trace with a known diffusion time on the Validation page."
 )

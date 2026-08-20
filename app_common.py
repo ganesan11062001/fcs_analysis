@@ -14,6 +14,7 @@ import streamlit as st
 
 from core.io import load_trace_auto
 from core.engine import _coarsen, select_window
+from core.autowindow import search_best_window
 
 DEFAULT_SETTINGS = {
     "segments": 5,
@@ -63,12 +64,21 @@ def format_seconds(x):
     us/ms/s so a labmate doesn't have to mentally parse 2.1e-04."""
     if x is None or not np.isfinite(x):
         return "n/a"
+    if x == 0:
+        return "0 s"
     ax = abs(x)
     if ax < 1e-3:
-        return f"{x * 1e6:.3g} µs"
-    if ax < 1.0:
-        return f"{x * 1e3:.3g} ms"
-    return f"{x:.3g} s"
+        scale, unit, next_scale, next_unit = 1e6, "µs", 1e3, "ms"
+    elif ax < 1.0:
+        scale, unit, next_scale, next_unit = 1e3, "ms", 1.0, "s"
+    else:
+        scale, unit, next_scale, next_unit = 1.0, "s", None, None
+    val = x * scale
+    # 3-sig-fig rounding can push a value like 999.95 up a full order of magnitude
+    # (displayed as "1e+03"); bump to the next unit before that happens instead.
+    if next_scale is not None and abs(val) >= 999.5:
+        val, unit = x * next_scale, next_unit
+    return f"{val:.3g} {unit}"
 
 
 def apply_chart_style(fig):
@@ -88,6 +98,18 @@ def load_trace_cached(file_bytes, filename):
         return load_trace_auto(tmp_path)
     finally:
         os.unlink(tmp_path)
+
+
+@st.cache_data(show_spinner="Scanning the trace for the cleanest time window...")
+def run_auto_window_search_cached(file_bytes, filename, segments, points_per_segment, base, bin_points, n_blocks):
+    """Cached so re-running the page (e.g. clicking a fit button) doesn't redo the
+    4-candidate window search -- only a change to the file or a settings value does."""
+    trace = load_trace_cached(file_bytes, filename)
+    return search_best_window(
+        trace.time, trace.channels,
+        segments=segments, points_per_segment=points_per_segment, base=base,
+        bin_points=bin_points, n_blocks=n_blocks,
+    )
 
 
 def decimate_for_display(time_arr, y_arr, max_points=5000):

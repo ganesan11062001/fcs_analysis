@@ -38,12 +38,7 @@ def test_single_file_analysis_dual_channel_end_to_end():
 
     at.file_uploader[0].set_value(("dual.csv", _make_dual_channel_csv_bytes(), "text/csv"))
     at.run(timeout=60)
-    assert not at.exception
-
-    run_corr_btn = [b for b in at.button if b.label == "Run correlation"][0]
-    run_corr_btn.click()
-    at.run(timeout=60)
-    assert not at.exception
+    assert not at.exception  # correlation now runs automatically on upload, no button
 
     # Fit CH1, CH2, and cross
     for key in ["sf_fit_btn_acf_ch1", "sf_fit_btn_acf_ch2", "sf_fit_btn_cross"]:
@@ -57,12 +52,7 @@ def test_single_file_analysis_single_channel_end_to_end():
     at.run(timeout=60)
     at.file_uploader[0].set_value(("single.csv", _make_single_channel_csv_bytes(), "text/csv"))
     at.run(timeout=60)
-    assert not at.exception
-
-    run_corr_btn = [b for b in at.button if b.label == "Run correlation"][0]
-    run_corr_btn.click()
-    at.run(timeout=60)
-    assert not at.exception
+    assert not at.exception  # correlation now runs automatically on upload, no button
 
     at.button(key="sf_fit_btn_acf_ch1").click()
     at.run(timeout=60)
