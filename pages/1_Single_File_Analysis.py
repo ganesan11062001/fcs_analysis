@@ -170,6 +170,8 @@ if st.session_state.get("sf_run_id") != run_id:
     st.session_state["sf_run_id"] = run_id
     st.session_state.pop("sf_fit_results", None)
     st.session_state["sf_window_choice"] = default_option
+    st.session_state["sf_fit_window_acf_ch1"] = default_option
+    st.session_state["sf_fit_window_acf_ch2"] = default_option
 
 with st.container(border=True):
     st.subheader("1. Time window")
@@ -288,7 +290,14 @@ with st.container(border=True):
 
 with st.container(border=True):
     st.subheader("3. Model fitting (optional)")
+    st.caption(
+        "CH1 and CH2 can each be fit from a different candidate window -- pick any window found "
+        "by the search in step 1 independently per channel. Cross-correlation needs both channels "
+        "sampled over the exact same window (it's a paired CH1(t)*CH2(t+tau) product), so it's only "
+        "available when both channels currently use the same one."
+    )
     fit_results = st.session_state.setdefault("sf_fit_results", {})
+    fit_window_used = st.session_state.setdefault("sf_fit_window_used", {})
 
     fit_panels = [("acf_ch1", "CH1 autocorrelation"), ("acf_ch2", "CH2 autocorrelation"), ("cross", "Cross-correlation")]
     fit_cols = st.columns(sum(1 for kind, _ in fit_panels if kind in results))
@@ -297,14 +306,44 @@ with st.container(border=True):
         if kind not in results:
             continue
         with fit_cols[col_idx]:
+            if kind in ("acf_ch1", "acf_ch2"):
+                fit_window_option = st.selectbox(
+                    f"Window for {label} fit", options=option_labels, key=f"sf_fit_window_{kind}",
+                    help="Defaults to the window selected in step 1, but you can fit this channel "
+                    "from a different candidate window than the other channel.",
+                )
+                kind_result = label_lookup[fit_window_option].corr_results[kind]
+            else:
+                ch1_window = st.session_state.get("sf_fit_window_acf_ch1")
+                ch2_window = st.session_state.get("sf_fit_window_acf_ch2")
+                if ch1_window != ch2_window:
+                    fit_results.pop("cross", None)
+                    fit_window_used.pop("cross", None)
+                    st.info(
+                        "CH1 and CH2 are currently using different windows "
+                        f"({ch1_window} vs {ch2_window}), so cross-correlation isn't available -- "
+                        "pick the same window for both to enable it."
+                    )
+                    col_idx += 1
+                    continue
+                fit_window_option = ch1_window
+                kind_result = label_lookup[fit_window_option].corr_results[kind]
+                st.caption(f"Using window: {fit_window_option}")
+
+            if fit_window_used.get(kind) != fit_window_option:
+                # The window for this channel changed since the last fit -- drop the stale
+                # result rather than show a fit overlaid on data from a different window.
+                fit_results.pop(kind, None)
+
             n_components, triplet, n_starts = fit_settings_widgets(f"sf_{kind}", label)
             if st.button(f"Fit {label}", key=f"sf_fit_btn_{kind}"):
                 with st.spinner(f"Fitting {label} ({n_starts} starts)..."):
                     report = multi_start_fit(
-                        results[kind].tau, results[kind].g, n_components=n_components, triplet=triplet,
+                        kind_result.tau, kind_result.g, n_components=n_components, triplet=triplet,
                         n_starts=n_starts, kappa=kappa,
                     )
                 fit_results[kind] = report
+                fit_window_used[kind] = fit_window_option
             if kind in fit_results:
                 report = fit_results[kind]
                 fr = report.chosen_result
@@ -313,7 +352,7 @@ with st.container(border=True):
                     f"{badge} ({report.converged_fraction:.0%} of {n_starts} starts converged)"
                 )
                 st.plotly_chart(
-                    plot_fit_overlay(results[kind].tau, results[kind].g, fr.fit_curve, title=label, color=SERIES_COLORS.get(kind)),
+                    plot_fit_overlay(kind_result.tau, kind_result.g, fr.fit_curve, title=label, color=SERIES_COLORS.get(kind)),
                     width="stretch",
                 )
                 for i, td in enumerate(fr.tauD):
