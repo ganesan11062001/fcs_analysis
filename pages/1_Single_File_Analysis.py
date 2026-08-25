@@ -271,16 +271,32 @@ with st.container(border=True):
             "(long-tau statistical unreliability, especially near the edge of the acquisition window)."
         )
 
+    curve_download_labels = {"acf_ch1": "CH1 autocorrelation", "acf_ch2": "CH2 autocorrelation", "cross": "Cross-correlation"}
+    curve_choice = st.radio(
+        "Curve to include in the CSV downloads below",
+        options=["All curves"] + [curve_download_labels[k] for k in results],
+        horizontal=True, key="sf_curve_download_choice",
+        help="Restricts the two CSV downloads to just one curve, e.g. to get a CH1-only file. "
+        "The VistaVision-format download always includes every curve, matching a real "
+        "VistaVision export's whole-measurement structure.",
+    )
+    if curve_choice == "All curves":
+        dl_results, dl_errors = results, errors
+    else:
+        kind_for_choice = next(k for k, v in curve_download_labels.items() if v == curve_choice)
+        dl_results = {kind_for_choice: results[kind_for_choice]}
+        dl_errors = {kind_for_choice: errors.get(kind_for_choice)}
+
     dl_cols = st.columns(3)
     dl_cols[0].download_button(
         "Download correlation curves (CSV)",
-        df_to_csv_bytes(correlation_results_to_df(results)),
+        df_to_csv_bytes(correlation_results_to_df(dl_results)),
         file_name=f"{uploaded.name}_correlation.csv",
         help="tau, G(tau), n_samples per curve -- no error column.",
     )
     dl_cols[1].download_button(
         "Download with error (CSV)",
-        df_to_csv_bytes(correlation_results_to_df_with_error(results, errors)),
+        df_to_csv_bytes(correlation_results_to_df_with_error(dl_results, dl_errors)),
         file_name=f"{uploaded.name}_correlation_with_error.csv",
         help="tau, G(tau), error, n_samples per curve.",
     )
