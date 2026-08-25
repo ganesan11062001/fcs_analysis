@@ -4,6 +4,7 @@ download at every stage (raw correlation curves, fit parameters, stability
 reports, Kd fits, batch comparisons).
 """
 
+import numpy as np
 import pandas as pd
 
 
@@ -34,39 +35,80 @@ def correlation_results_to_df_with_error(results, errors):
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def correlation_results_to_vistavision_csv_text(results, errors, sampling_rate_hz, mean_rates):
-    """Reproduces VistaVision's exported [HeaderX]/[Data] file structure and its
-    tau,G,err column layout (one G+err pair per curve: CH1 autocorrelation, and if
-    dual-channel, CH2 autocorrelation and cross-correlation) -- for drop-in
-    familiarity with VistaVision's own correlation-export format.
+def correlation_results_to_vistavision_csv_text(
+    results, errors, sampling_rate_hz, mean_rates, measurement_time_s, raw_data_file="", created=None,
+):
+    """Matches a real VistaVision [HeaderV]/[Data] export's structure: a metadata
+    header block, then one label line + one comma-separated data row per quantity
+    (Tau, ChN AutoCorrelation, ChN AutoCorrelation Standard Deviation, Ch0x1
+    CrossCorrelation, Ch0x1 CrossCorrelation Standard Deviation) -- NOT the
+    row-per-tau table this app used to export under this name.
 
-    mean_rates: list of mean count rates, [CH1] or [CH1, CH2], matching VistaVision's
-    header line 4.
+    mean_rates / TotalPhotons: VistaVision's TotalPhotons is the actual summed raw
+    photon count over the measurement window; this app only has the mean count rate
+    (CPS) for the analyzed window, so TotalPhotons here is approximated as
+    CPS * measurement_time_s rather than a true per-bin sum -- consistent with the
+    CPS value on the same line, but not an independently-measured integer count.
 
-    Does NOT reproduce VistaVision's segment-boundary duplicate rows (where a coarser
-    segment's leading point(s) numerically coincide with the previous segment's
-    trailing point(s)) -- that's an undocumented internal quirk of VistaVision's
-    correlator, not part of the published multi-tau algorithm (manual section 13.4.1)
-    this app's engine is validated against, so it isn't reproduced here.
+    Does NOT reproduce VistaVision's segment-boundary duplicate Tau values (e.g. a
+    repeated "2E-05, 2E-05" in a real export) -- that's an undocumented internal
+    quirk of VistaVision's own correlator with no published rule behind it, and
+    with no raw trace available that's known to produce it, reproducing it would
+    mean guessing at a pattern rather than validating one.
     """
+    import datetime
+
     any_result = next(iter(results.values()))
-    lines = [
-        "[HeaderX]",
-        str(any_result.segments),
-        str(any_result.points_per_segment),
-        str(sampling_rate_hz),
-        ",".join(f"{r:.10g}" for r in mean_rates),
-        "[Data]",
+    n_channels = 2 if "acf_ch2" in results else 1
+    created = created or datetime.datetime.now().isoformat(timespec="seconds")
+
+    header = [
+        "[HeaderV]",
+        "Version, 3",
+        f"RawDataFile, {raw_data_file}",
+        f"Created,{created}",
+        f"Sections,{any_result.segments}",
+        f"PtsPerSection, {any_result.points_per_segment}",
+        f"SampleFrequency, {sampling_rate_hz:.10g}",
+        "TimeSeries Count, 1",
+        "PositionSeries Count, 1",
+        "Spectrum Count, 1",
+        f"ChannelCount, {n_channels}",
+        f"MeasurementTime(sec), {measurement_time_s:.10g}",
+        "",
+        "iT,1",
+        "iP,1",
+        "iS,1",
     ]
-    kinds_order = [k for k in ("acf_ch1", "acf_ch2", "cross") if k in results]
-    tau = results[kinds_order[0]].tau
-    for i in range(len(tau)):
-        row = [f"{tau[i]:.10g}"]
-        for kind in kinds_order:
-            row.append(f"{results[kind].g[i]:.10g}")
-            err = errors.get(kind)
-            row.append(f"{err[i]:.10g}" if err is not None and not pd.isna(err[i]) else "")
-        lines.append(",".join(row))
+    if n_channels == 2:
+        header.append("AutoChannelIDs, 0, 1")
+        header.append("CPS, " + ", ".join(f"{r:.12g}" for r in mean_rates))
+        header.append("TotalPhotons, " + ", ".join(f"{r * measurement_time_s:.0f}" for r in mean_rates))
+        header.append("CrossChannelIDs,01")
+    else:
+        header.append("AutoChannelIDs, 0")
+        header.append(f"CPS, {mean_rates[0]:.12g}")
+        header.append(f"TotalPhotons, {mean_rates[0] * measurement_time_s:.0f}")
+    header += ["", "[Data]", "", "iT=1, iP=1, iS=1", ""]
+
+    def block(label, values):
+        # NaN can appear in the error arrays (too few sub-blocks reached a given tau);
+        # written as 0 here since this text format has no other way to express "unknown".
+        return [label, ", ".join(f"{v:.12g}" if np.isfinite(v) else "0" for v in values), ""]
+
+    lines = list(header)
+    lines += block("Tau", results["acf_ch1"].tau)
+    lines += block("Ch0 AutoCorrelation", results["acf_ch1"].g)
+    err = errors.get("acf_ch1")
+    lines += block("Ch0 AutoCorrelation Standard Deviation", err if err is not None else np.zeros_like(results["acf_ch1"].g))
+    if n_channels == 2:
+        lines += block("Ch1 AutoCorrelation", results["acf_ch2"].g)
+        err = errors.get("acf_ch2")
+        lines += block("Ch1 AutoCorrelation Standard Deviation", err if err is not None else np.zeros_like(results["acf_ch2"].g))
+        lines += block("Ch0x1 CrossCorrelation", results["cross"].g)
+        err = errors.get("cross")
+        lines += block("Ch0x1 CrossCorrelation Standard Deviation", err if err is not None else np.zeros_like(results["cross"].g))
+
     return "\n".join(lines) + "\n"
 
 

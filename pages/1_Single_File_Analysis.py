@@ -270,11 +270,14 @@ with st.container(border=True):
         "Download (VistaVision format)",
         correlation_results_to_vistavision_csv_text(
             results, errors, sampling_rate_hz=1.0 / chosen.eff_dt, mean_rates=chosen.mean_rates,
+            measurement_time_s=chosen.t1 - chosen.t0, raw_data_file=uploaded.name,
         ),
         file_name=f"{uploaded.name}_correlation_vistavision.csv",
-        help="Matches VistaVision's [HeaderX]/[Data] structure and tau,G,err column layout. Does NOT "
-        "reproduce VistaVision's segment-boundary duplicate rows (an undocumented internal quirk, not "
-        "part of the published multi-tau algorithm this engine is validated against).",
+        help="Matches a real VistaVision [HeaderV]/[Data] export's structure (metadata header + one "
+        "row per quantity: Tau, ChN AutoCorrelation, ChN AutoCorrelation Standard Deviation, "
+        "Ch0x1 CrossCorrelation). Does NOT reproduce VistaVision's segment-boundary duplicate Tau "
+        "values -- an undocumented internal quirk with no known rule to reproduce without the raw "
+        "trace that produced it.",
     )
 
 with st.container(border=True):
