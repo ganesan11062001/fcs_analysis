@@ -20,7 +20,8 @@ DEFAULT_SETTINGS = {
     "segments": 5,
     "points_per_segment": 15,
     "base": 4,
-    "kappa": 5.0,
+    "w_xy_um": 0.2,
+    "w_z_um": 1.0,
     "min_reliable_n_samples": 10,
 }
 
@@ -45,6 +46,13 @@ REFERENCE_LINE = "#0b0b0b"  # neutral (non-categorical) color for "true value" a
 def init_defaults():
     if "defaults" not in st.session_state:
         st.session_state["defaults"] = dict(DEFAULT_SETTINGS)
+
+
+def kappa_from_w(w_xy_um, w_z_um):
+    """kappa = w_z/w_xy, the structure parameter that actually enters the fit
+    model's diffusion term -- the model has no other dependence on the beam
+    waist, so w_xy/w_z are only ever used to derive this ratio, never directly."""
+    return w_z_um / w_xy_um
 
 
 def sidebar_about():

@@ -12,6 +12,7 @@ from app_common import (
     plot_fit_overlay,
     fit_settings_widgets,
     format_seconds,
+    kappa_from_w,
     SERIES_COLORS,
 )
 
@@ -127,17 +128,25 @@ with st.expander("Advanced settings (defaults match VistaVision manual sec. 13.4
             "but needs a longer trace per candidate window."
         ),
     )
-    kappa = st.number_input(
-        "kappa / w (structure parameter, fixed)", min_value=0.1, value=d["kappa"], step=0.1, key="sf_kappa",
-        help=(
-            r"$\kappa = w_z/w_{xy}$, the axial:radial ratio of your confocal detection volume "
-            r"(sometimes just called $w$). Used only in the fit model's diffusion term "
-            r"$\frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_D)}}$, not in computing G(tau) itself.\n\n"
-            "Fixed rather than floated because it's badly degenerate with tau_D without an "
-            "independent volume calibration -- a wrong value biases the fitted tau_D, especially "
-            "at long tau. Typical confocal setups: ~3-6. Overrides the Home page's global default "
-            "for this session/page only."
-        ),
+    wcol1, wcol2 = st.columns(2)
+    w_xy_um = wcol1.number_input(
+        "w_xy (µm, radial)", min_value=0.01, value=d["w_xy_um"], step=0.01, format="%.3f", key="sf_w_xy",
+        help="The confocal detection volume's radial (lateral) beam waist, in microns. Only ever "
+        "used to derive kappa below -- the fit model has no separate dependence on its absolute "
+        "value. Overrides the Home page's global default for this session/page only.",
+    )
+    w_z_um = wcol2.number_input(
+        "w_z (µm, axial)", min_value=0.01, value=d["w_z_um"], step=0.01, format="%.3f", key="sf_w_z",
+        help="The confocal detection volume's axial beam waist, in microns. Only ever used to "
+        "derive kappa below. Overrides the Home page's global default for this session/page only.",
+    )
+    kappa = kappa_from_w(w_xy_um, w_z_um)
+    st.caption(
+        f"kappa = w_z / w_xy = **{kappa:.3g}** -- the only quantity that actually enters the fit "
+        r"model's diffusion term $\frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_D)}}$, not in computing "
+        "G(tau) itself. Fixed rather than floated because it's badly degenerate with tau_D "
+        "without an independent volume calibration -- a wrong value biases the fitted tau_D, "
+        "especially at long tau. Typical confocal setups: kappa ~ 3-6."
     )
 
 run_id = (

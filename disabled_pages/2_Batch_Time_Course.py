@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app_common import init_defaults, sidebar_about, load_trace_cached, window_channels, apply_chart_style, SERIES_COLORS
+from app_common import init_defaults, sidebar_about, load_trace_cached, window_channels, apply_chart_style, kappa_from_w, SERIES_COLORS
 from core.binning import apply_point_binning
 from core.correlate import compute_all_correlations
 from core.fitting import multi_start_fit
@@ -14,6 +14,7 @@ st.set_page_config(page_title="Batch / Time Course", layout="wide")
 init_defaults()
 sidebar_about()
 d = st.session_state["defaults"]
+kappa = kappa_from_w(d["w_xy_um"], d["w_z_um"])
 
 st.title("Batch / Time Course Processing")
 st.caption(
@@ -77,19 +78,19 @@ with st.container(border=True):
             row = {"filename": f.name, "label": label, "n_channels": trace.n_channels}
             fits = {}
             if "acf_ch1" in corr:
-                rep1 = multi_start_fit(corr["acf_ch1"].tau, corr["acf_ch1"].g, n_components=ncomp1, triplet=trip1, n_starts=n_starts, kappa=d["kappa"])
+                rep1 = multi_start_fit(corr["acf_ch1"].tau, corr["acf_ch1"].g, n_components=ncomp1, triplet=trip1, n_starts=n_starts, kappa=kappa)
                 fits["acf_ch1"] = rep1
                 row["tauD_ch1"] = rep1.chosen_result.tauD[0] if rep1.chosen_result.tauD else np.nan
                 row["N_ch1"] = rep1.chosen_result.N
                 row["stable_ch1"] = rep1.is_stable
             if "acf_ch2" in corr:
-                rep2 = multi_start_fit(corr["acf_ch2"].tau, corr["acf_ch2"].g, n_components=ncomp2, triplet=trip2, n_starts=n_starts, kappa=d["kappa"])
+                rep2 = multi_start_fit(corr["acf_ch2"].tau, corr["acf_ch2"].g, n_components=ncomp2, triplet=trip2, n_starts=n_starts, kappa=kappa)
                 fits["acf_ch2"] = rep2
                 row["tauD_ch2"] = rep2.chosen_result.tauD[0] if rep2.chosen_result.tauD else np.nan
                 row["N_ch2"] = rep2.chosen_result.N
                 row["stable_ch2"] = rep2.is_stable
             if "cross" in corr:
-                repx = multi_start_fit(corr["cross"].tau, corr["cross"].g, n_components=ncompx, triplet=tripx, n_starts=n_starts, kappa=d["kappa"])
+                repx = multi_start_fit(corr["cross"].tau, corr["cross"].g, n_components=ncompx, triplet=tripx, n_starts=n_starts, kappa=kappa)
                 fits["cross"] = repx
                 row["stable_cross"] = repx.is_stable
             if "acf_ch1" in fits and "acf_ch2" in fits and "cross" in fits:

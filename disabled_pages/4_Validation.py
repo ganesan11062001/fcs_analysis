@@ -9,6 +9,7 @@ from app_common import (
     plot_fit_overlay,
     apply_chart_style,
     format_seconds,
+    kappa_from_w,
     SERIES_COLORS,
     REFERENCE_LINE,
 )
@@ -20,6 +21,7 @@ st.set_page_config(page_title="Validation", layout="wide")
 init_defaults()
 sidebar_about()
 d = st.session_state["defaults"]
+kappa = kappa_from_w(d["w_xy_um"], d["w_z_um"])
 
 st.title("Validation")
 st.caption(
@@ -88,11 +90,11 @@ with st.container(border=True):
 
     if st.button("Generate & fit synthetic trace", type="primary"):
         with st.spinner("Generating synthetic trace and fitting..."):
-            synth = generate_synthetic_fcs_trace(tauD=tauD_true, dt=dt_synth, duration_s=duration_s, N_particles=N_particles, kappa=d["kappa"], seed=42)
+            synth = generate_synthetic_fcs_trace(tauD=tauD_true, dt=dt_synth, duration_s=duration_s, N_particles=N_particles, kappa=kappa, seed=42)
             tau, g, _ = engine.multiple_tau_correlate(
                 synth.counts, synth.counts, synth.dt, segments=d["segments"], points_per_segment=d["points_per_segment"], base=d["base"]
             )
-            fr = fit_curve(tau, g, n_components=1, kappa=d["kappa"])
+            fr = fit_curve(tau, g, n_components=1, kappa=kappa)
         st.session_state["val_synth"] = (synth, tau, g, fr)
 
     if "val_synth" in st.session_state:
@@ -120,12 +122,12 @@ with st.container(border=True):
         progress = st.progress(0.0, text="Starting Monte Carlo repeat...")
         for i in range(int(n_repeats)):
             synth_i = generate_synthetic_fcs_trace(
-                tauD=tauD_true, dt=dt_synth, duration_s=duration_s, N_particles=N_particles, kappa=d["kappa"], seed=i
+                tauD=tauD_true, dt=dt_synth, duration_s=duration_s, N_particles=N_particles, kappa=kappa, seed=i
             )
             tau_i, g_i, _ = engine.multiple_tau_correlate(
                 synth_i.counts, synth_i.counts, synth_i.dt, segments=d["segments"], points_per_segment=d["points_per_segment"], base=d["base"]
             )
-            fr_i = fit_curve(tau_i, g_i, n_components=1, kappa=d["kappa"])
+            fr_i = fit_curve(tau_i, g_i, n_components=1, kappa=kappa)
             if fr_i.success:
                 recovered.append(fr_i.tauD[0])
             progress.progress((i + 1) / n_repeats, text=f"Repeat {i + 1}/{int(n_repeats)}")

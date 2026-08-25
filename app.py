@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app_common import init_defaults, sidebar_about
+from app_common import init_defaults, sidebar_about, kappa_from_w
 
 st.set_page_config(page_title="FCS/FCCS Analysis", layout="wide")
 
@@ -69,7 +69,7 @@ behind each step.
     )
 
     with st.container(border=True):
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         d = st.session_state["defaults"]
         d["segments"] = col1.number_input(
             "Segments", min_value=1, max_value=20, value=d["segments"],
@@ -90,24 +90,29 @@ behind each step.
             "choice -- roughly quadruples tau spacing per segment for even log coverage. Larger = "
             "fewer segments needed but coarser within-decade resolution.",
         )
-        d["kappa"] = col4.number_input(
-            "kappa (structure param, fixed)", min_value=0.1, value=d["kappa"], step=0.1,
-            help=r"$\kappa = w_z/w_{xy}$, the axial:radial ratio of the detection volume. Used only "
-            r"in the fit model's diffusion term $\frac{1}{\sqrt{1+\tau/(\kappa^2 \tau_D)}}$, not in "
-            r"computing $G(\tau)$ itself. Fixed rather than floated because it's badly degenerate with $\tau_D$ without "
-            "an independent volume calibration; a wrong value biases the fitted tauD, especially "
-            "at long tau. Typical confocal setups: ~3-6; 5.0 is a common default.",
+        d["w_xy_um"] = col4.number_input(
+            "w_xy (µm, radial)", min_value=0.01, value=d["w_xy_um"], step=0.01, format="%.3f",
+            help=r"The confocal detection volume's radial (lateral) beam waist, in microns -- from "
+            "your instrument's own calibration. Only ever used to derive kappa below; the fit "
+            "model has no separate dependence on its absolute value.",
         )
-        d["min_reliable_n_samples"] = col5.number_input(
+        d["w_z_um"] = col5.number_input(
+            "w_z (µm, axial)", min_value=0.01, value=d["w_z_um"], step=0.01, format="%.3f",
+            help="The confocal detection volume's axial beam waist, in microns -- from your "
+            "instrument's own calibration. Only ever used to derive kappa below.",
+        )
+        kappa = kappa_from_w(d["w_xy_um"], d["w_z_um"])
+        st.caption(
+            f"kappa = w_z / w_xy = **{kappa:.3g}** -- this is the only quantity that actually enters "
+            "the fit model's diffusion term; typical confocal setups land around 3-6. w_xy/w_z "
+            "themselves have no calibration workflow yet for converting tau_D to an absolute "
+            "diffusion coefficient or concentration (see README)."
+        )
+        d["min_reliable_n_samples"] = col6.number_input(
             "Min samples for a reliable tau point", min_value=1, value=d["min_reliable_n_samples"],
             help="Below this many averaged terms, a tau point is marked unreliable ('x' marker) "
             "on the correlation plot. Display/QA only -- it never changes G(tau) itself, just "
             "flags noisy long-tau points near the edge of your trace length.",
-        )
-        st.caption(
-            "kappa has no calibration workflow yet (see README): tau_D and amplitude/N are "
-            "reported directly rather than converted to an absolute diffusion coefficient or "
-            "concentration."
         )
 
 
