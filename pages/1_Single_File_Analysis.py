@@ -245,7 +245,13 @@ errors = chosen.corr_errors
 
 with st.container(border=True):
     st.subheader("2. Correlation curves")
-    fig, any_unreliable = plot_correlation_curve(results, d["min_reliable_n_samples"], title=uploaded.name)
+    st.caption(
+        f"Window: **{chosen.label}** "
+        f"(t = {format_seconds(chosen.t0)} to {format_seconds(chosen.t1)})"
+    )
+    fig, any_unreliable = plot_correlation_curve(
+        results, d["min_reliable_n_samples"], title=f"{uploaded.name} -- {chosen.label}"
+    )
     st.plotly_chart(fig, width="stretch")
     if any_unreliable:
         st.caption(
