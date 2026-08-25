@@ -88,8 +88,14 @@ def apply_chart_style(fig):
     return fig
 
 
-@st.cache_data(show_spinner="Parsing trace file...")
+@st.cache_resource(show_spinner="Parsing trace file...")
 def load_trace_cached(file_bytes, filename):
+    """cache_resource (not cache_data): a real trace can be tens of millions of
+    points, and cache_data deep-copies its return value on every call -- on a
+    12M-point dual-channel trace that copy alone costs ~200MB and real time,
+    repeated on every widget interaction. Nothing downstream mutates trace.time
+    or trace.channels in place (windowing/binning always slice into new arrays),
+    so sharing the same object across reruns is safe."""
     suffix = os.path.splitext(filename)[1] or ".csv"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(file_bytes)
@@ -100,7 +106,7 @@ def load_trace_cached(file_bytes, filename):
         os.unlink(tmp_path)
 
 
-@st.cache_data(show_spinner="Sliding the window across the trace to find the cleanest stretch...")
+@st.cache_resource(show_spinner="Sliding the window across the trace to find the cleanest stretch...")
 def run_auto_window_search_cached(
     file_bytes, filename, window_length_s, segments, points_per_segment, base, bin_points, n_blocks
 ):
