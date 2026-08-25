@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -322,6 +323,7 @@ with st.container(border=True):
                     "from a different candidate window than the other channel.",
                 )
                 kind_result = label_lookup[fit_window_option].corr_results[kind]
+                kind_error = label_lookup[fit_window_option].corr_errors.get(kind)
             else:
                 ch1_window = st.session_state.get("sf_fit_window_acf_ch1")
                 ch2_window = st.session_state.get("sf_fit_window_acf_ch2")
@@ -337,6 +339,7 @@ with st.container(border=True):
                     continue
                 fit_window_option = ch1_window
                 kind_result = label_lookup[fit_window_option].corr_results[kind]
+                kind_error = label_lookup[fit_window_option].corr_errors.get(kind)
                 st.caption(f"Using window: {fit_window_option}")
 
             if fit_window_used.get(kind) != fit_window_option:
@@ -346,10 +349,19 @@ with st.container(border=True):
 
             n_components, triplet, n_starts = fit_settings_widgets(f"sf_{kind}", label)
             if st.button(f"Fit {label}", key=f"sf_fit_btn_{kind}"):
+                # Weight each tau point by 1/sigma_G so the optimizer (and the reported
+                # reduced chi-squared) actually accounts for per-point uncertainty, instead
+                # of treating every point as equally reliable. Points with an unknown/zero
+                # sigma (too few sub-blocks reached that tau) get weight 0 -- excluded from
+                # the fit rather than assigned a made-up uncertainty.
+                if kind_error is not None:
+                    weights = np.where(np.isfinite(kind_error) & (kind_error > 0), 1.0 / kind_error, 0.0)
+                else:
+                    weights = None
                 with st.spinner(f"Fitting {label} ({n_starts} starts)..."):
                     report = multi_start_fit(
                         kind_result.tau, kind_result.g, n_components=n_components, triplet=triplet,
-                        n_starts=n_starts, kappa=kappa,
+                        n_starts=n_starts, kappa=kappa, weights=weights,
                     )
                 fit_results[kind] = report
                 fit_window_used[kind] = fit_window_option
