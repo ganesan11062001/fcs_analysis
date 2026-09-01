@@ -59,10 +59,11 @@ if trace.used_fallback_parser:
 
 t_min, t_max = float(trace.time[0]), float(trace.time[-1])
 window_options = window_length_options_for_trace(t_min, t_max)
+default_window_length_idx = window_options.index(3) if 3 in window_options else len(window_options) // 2
 window_length_s = st.selectbox(
     "Time period per window (s)",
     options=window_options,
-    index=len(window_options) // 2,
+    index=default_window_length_idx,
     key="sf_window_length_s",
     help=(
         "The app slides a window of this length across the whole trace in 1-second steps "
